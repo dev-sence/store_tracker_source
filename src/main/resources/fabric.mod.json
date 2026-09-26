@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "sence_storetracker",
+  "version": "${version}",
+  "name": "Sence_StoreTracker_PUBLIC",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/sence_storetracker/icon.png",
+  "environment": "client",
+  "mixins": [
+    "sence_storetracker.mixins.json"
+  ],
+  "entrypoints": {
+    "client": [
+      "sence.playf.storetracker.StoreTrackerClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

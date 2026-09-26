@@ -1,0 +1,18 @@
+# Gradle / Fabric
+.gradle/
+build/
+run/
+*.log
+
+# IDE
+.idea/
+*.iml
+
+# Flask 서버 (실제 비밀값/DB는 절대 커밋하지 않음)
+server/.env
+server/instance/
+server/*.db
+server/__pycache__/
+server/.venv/
+instance/
+*.db

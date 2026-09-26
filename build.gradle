@@ -1,0 +1,139 @@
+plugins {
+    id 'fabric-loom' version '1.9.2'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+// 배포용 빌드: ./gradlew build -PbuildType=public (기본값은 dev)
+def buildType = (project.findProperty('buildType') ?: 'dev').toString()
+def isPublicBuild = buildType == 'public'
+
+base {
+    archivesName = project.archives_base_name + (isPublicBuild ? '' : '-dev')
+}
+
+repositories {
+    // Add repositories to retrieve artifacts from in here.
+    // You should only use this when depending on other mods because
+    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
+    // for more information about repositories.
+}
+
+dependencies {
+    // To change the versions see the gradle.properties file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Fabric API. This is technically optional, but you probably want it anyway.
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+// dev 빌드: 로컬 Flask 서버 대상, 업데이트 체크/멤버 게이트 비활성화 (테스트 편의).
+// public 빌드: 배포용 API 주소 필요, 업데이트 체크/멤버 게이트 활성화.
+def apiBaseUrl = isPublicBuild
+        ? (project.findProperty('publicApiBaseUrl') ?: 'https://TODO-set-production-url')
+        : 'http://localhost:5000'
+def githubRepo = project.findProperty('githubRepo') ?: 'TODO/Sence_StoreTracker'
+// Flask의 APP_SECRET(.env)과 반드시 동일한 값이어야 함. 빌드 시 -PappSecret=... 로 주입.
+// (기본값은 로컬 개발용 자리표시자이며 절대 실제 배포에 그대로 쓰지 말 것)
+def appSecret = project.findProperty('appSecret') ?: 'change-me-to-a-long-random-value'
+// /chest_add, 공용템 저장 등 관리자 API 호출용. dev 빌드에만 넣고, public 빌드는 절대 넣지 않는다
+// (배포되는 jar를 디컴파일해서 관리자 토큰이 새어나가면 안 되므로).
+def adminToken = isPublicBuild ? '' : (project.findProperty('adminToken') ?: '')
+
+// 배포용 빌드는 자리표시자 값이 그대로 남아있으면 빌드 자체를 실패시킨다.
+// (appSecret 기본값은 이 저장소/대화에 그대로 적혀있어서, 그대로 배포하면 암호화가 사실상 뚫린 것과 같음)
+if (isPublicBuild) {
+    if (appSecret == 'change-me-to-a-long-random-value') {
+        throw new GradleException(
+                "배포용 빌드는 -PappSecret=<서버 .env의 APP_SECRET과 동일한 값>을 반드시 지정해야 합니다.")
+    }
+    if (apiBaseUrl == 'https://TODO-set-production-url') {
+        throw new GradleException(
+                "배포용 빌드는 -PpublicApiBaseUrl=<실제 배포된 서버 주소>를 반드시 지정해야 합니다.")
+    }
+    if (apiBaseUrl.contains('localhost') || apiBaseUrl.contains('127.0.0.1')) {
+        logger.warn("⚠ 배포용 빌드가 localhost를 가리키고 있습니다 (로컬 테스트용이면 무시하세요): ${apiBaseUrl}")
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    inputs.property "buildType", buildType
+    // 이 값들이 바뀌었는데도 Gradle이 "달라진 게 없다"고 캐시를 재사용하는 걸 막기 위해 전부 입력으로 선언.
+    inputs.property "apiBaseUrl", apiBaseUrl
+    inputs.property "githubRepo", githubRepo
+    inputs.property "appSecret", appSecret
+    inputs.property "adminToken", adminToken
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version
+    }
+
+    filesMatching("assets/sence_storetracker/build.properties") {
+        expand "build_type": buildType,
+                "mod_version": project.version,
+                "api_base_url": apiBaseUrl,
+                "github_repo": githubRepo,
+                "update_check_enabled": isPublicBuild,
+                "member_gate_enabled": isPublicBuild,
+                "app_secret": appSecret,
+                "admin_token": adminToken
+    }
+}
+
+def targetJavaVersion = 21
+tasks.withType(JavaCompile).configureEach {
+    // ensure that the encoding is set to UTF-8, no matter what the system default is
+    // this fixes some edge cases with special characters not displaying correctly
+    // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
+    // If Javadoc is generated, this must be specified in that task too.
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.archivesBaseName}" }
+    }
+}
+
+// configure the maven publication
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+
+    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+    repositories {
+        // Add repositories to publish to here.
+        // Notice: This block does NOT have the same function as the block in the top level.
+        // The repositories here will be used for publishing your artifact, not for
+        // retrieving dependencies.
+    }
+}

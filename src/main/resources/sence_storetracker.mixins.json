@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "sence.playf.storetracker.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ScreenAddDrawableChildInvoker",
+    "HandledScreenClickGuardMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
