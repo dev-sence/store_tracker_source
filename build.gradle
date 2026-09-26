@@ -59,6 +59,9 @@ if (isPublicBuild) {
     if (apiBaseUrl.contains('localhost') || apiBaseUrl.contains('127.0.0.1')) {
         logger.warn("⚠ 배포용 빌드가 localhost를 가리키고 있습니다 (로컬 테스트용이면 무시하세요): ${apiBaseUrl}")
     }
+    if (githubRepo.startsWith('TODO/')) {
+        logger.warn("⚠ -PgithubRepo=<계정>/<릴리스 저장소>를 지정하지 않았습니다 - 자동 업데이트 확인 기능이 꺼진 채로 빌드됩니다.")
+    }
 }
 
 processResources {
