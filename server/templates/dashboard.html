@@ -44,6 +44,10 @@
           <span>재고 현황</span>
         </div>
         {% if is_developer %}
+        <div class="nav-item" data-section="manual-transfer">
+          <span class="material-symbols-outlined">swap_horiz</span>
+          <span>수동 사용/반납</span>
+        </div>
         <div class="nav-item" data-section="admin">
           <span class="material-symbols-outlined">terminal</span>
           <span>개발자</span>
@@ -175,6 +179,47 @@
         </table>
       </div>
     </div>
+
+    {% if is_developer %}
+    <div class="panel p-3 p-md-4" id="section-manual-transfer" style="display:none;">
+      <div class="section-title mb-3"><span class="material-symbols-outlined">swap_horiz</span>수동 사용 / 반납</div>
+      <div class="text-secondary small mb-3">
+        상자를 거치지 않고 공용템을 가져가거나 돌려준 경우를 기록합니다. 실제 입출고처럼 재고와 보유 장부가 바로 반영됩니다.
+      </div>
+
+      <form id="manualTransferForm" class="row g-2 align-items-end mb-4">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-secondary mb-1">아이템</label>
+          <select class="form-select" id="manualTransferItem" required></select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label small text-secondary mb-1">동작</label>
+          <select class="form-select" id="manualTransferAction" required>
+            <option value="HOLD">수동 사용 (가져감)</option>
+            <option value="RELEASE">수동 반납 (돌려줌)</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label small text-secondary mb-1">닉네임</label>
+          <input type="text" class="form-control" id="manualTransferUsername" placeholder="마인크래프트 닉네임" required>
+        </div>
+        <div class="col-8 col-md-1">
+          <label class="form-label small text-secondary mb-1">개수</label>
+          <input type="number" class="form-control" id="manualTransferCount" min="1" step="1" value="1" required>
+        </div>
+        <div class="col-4 col-md-1">
+          <button type="submit" class="btn btn-accent w-100">적용</button>
+        </div>
+      </form>
+
+      <div class="section-title mb-2" style="font-size:1rem;">최근 수동 기록</div>
+      <div style="max-height: 40vh; overflow-y: auto;">
+        <div class="d-flex flex-column gap-2" id="manualTransferLog">
+          <div class="text-secondary small">아직 기록이 없습니다.</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

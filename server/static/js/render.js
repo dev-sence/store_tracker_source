@@ -69,7 +69,7 @@ const StoreTrackerRender = {
     }).join('');
   },
 
-  inventory(items, isDeveloper, onEdit, onManualTransfer) {
+  inventory(items, isDeveloper, onEdit) {
     const body = document.getElementById('inventoryBody');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">등록된 공용템이 없습니다.</td></tr>';
@@ -82,22 +82,17 @@ const StoreTrackerRender = {
       const holders = item.holders.length
         ? item.holders.map((h) => `${escape(h.username)} <span class="text-secondary">x${h.count}</span>`).join(', ')
         : '<span class="text-secondary">없음</span>';
-      const actionBtns = isDeveloper
+      const editBtn = isDeveloper
         ? `<button class="btn btn-sm btn-outline-light py-0 px-1 ms-2 inventory-edit-btn"
              data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
              data-current="${item.stock}" title="재고 수동 수정">
              <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">edit</span>
-           </button>
-           <button class="btn btn-sm btn-outline-light py-0 px-1 ms-1 inventory-transfer-btn"
-             data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
-             title="수동 사용/반납">
-             <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">swap_horiz</span>
            </button>`
         : '';
 
       return `<tr>
         <td>${escape(item.display_name)}</td>
-        <td class="text-end fw-semibold">${item.stock}${actionBtns}</td>
+        <td class="text-end fw-semibold">${item.stock}${editBtn}</td>
         <td class="small">${holders}</td>
       </tr>`;
     }).join('');
@@ -106,10 +101,46 @@ const StoreTrackerRender = {
       body.querySelectorAll('.inventory-edit-btn').forEach((btn) => {
         btn.addEventListener('click', () => onEdit(btn.dataset.itemId, btn.dataset.itemName, Number(btn.dataset.current)));
       });
-      body.querySelectorAll('.inventory-transfer-btn').forEach((btn) => {
-        btn.addEventListener('click', () => onManualTransfer(btn.dataset.itemId, btn.dataset.itemName));
-      });
     }
+  },
+
+  manualTransferItemOptions(items) {
+    const select = document.getElementById('manualTransferItem');
+    if (!select) return;
+    const escape = this.escapeHtml;
+    const previous = select.value;
+
+    if (!items.length) {
+      select.innerHTML = '<option value="">등록된 공용템이 없습니다</option>';
+      return;
+    }
+
+    select.innerHTML = items.map((item) => `<option value="${escape(item.item_id)}">${escape(item.display_name)} (재고 ${item.stock})</option>`).join('');
+    if (items.some((item) => item.item_id === previous)) {
+      select.value = previous;
+    }
+  },
+
+  manualTransferLog(list) {
+    const container = document.getElementById('manualTransferLog');
+    if (!container) return;
+    const escape = this.escapeHtml;
+
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">아직 기록이 없습니다.</div>';
+      return;
+    }
+
+    const labels = { HOLD: '수동 사용', RELEASE: '수동 반납' };
+    container.innerHTML = list.map((e) => `
+      <div class="panel p-2 px-3 d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge ${e.action === 'HOLD' ? 'badge-take' : 'badge-deposit'} me-2">${labels[e.action] || e.action}</span>
+          <span class="small">${escape(e.minecraft_username)} · ${escape(e.item_name)} x${e.count}</span>
+        </div>
+        <span class="text-secondary small">${this.formatTime(e.received_at)}</span>
+      </div>
+    `).join('');
   },
 
   featureToggles(toggles, onToggle) {
