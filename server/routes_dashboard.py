@@ -5,6 +5,7 @@ from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
+import discord_backoff
 import discord_oauth
 from models import ChestInventoryItem, Event, Member, PlayerItemLedger, PublicItemType, TrackedChest, db
 
@@ -75,12 +76,14 @@ def discord_callback():
     )
     if not token_data or "access_token" not in token_data:
         logger.warning("discord callback: 토큰 교환 실패, token_data=%r", token_data)
-        return redirect(url_for("dashboard.login", error="1"))
+        error_code = "rate_limited" if discord_backoff.in_backoff() else "1"
+        return redirect(url_for("dashboard.login", error=error_code))
 
     user = discord_oauth.fetch_oauth_user(token_data["access_token"])
     if not user or "id" not in user:
         logger.warning("discord callback: 유저 정보 조회 실패, user=%r", user)
-        return redirect(url_for("dashboard.login", error="1"))
+        error_code = "rate_limited" if discord_backoff.in_backoff() else "1"
+        return redirect(url_for("dashboard.login", error=error_code))
 
     discord_id = str(user["id"])
     session["discord_id"] = discord_id

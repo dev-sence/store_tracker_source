@@ -32,6 +32,10 @@ class Config:
     DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
     DISCORD_GUILD_ID = os.environ.get("DISCORD_GUILD_ID", "")
     DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "")
+    # Render 무료 티어의 공유 아웃바운드 IP가 discord.com 앞단 Cloudflare에 종종 막혀서,
+    # 설정돼 있으면 서버->디스코드 호출을 Cloudflare Worker 프록시로 우회한다 (비워두면 직접 호출).
+    DISCORD_PROXY_URL = os.environ.get("DISCORD_PROXY_URL", "")
+    DISCORD_PROXY_SECRET = os.environ.get("DISCORD_PROXY_SECRET", "")
     _database_url = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
     # Neon/Render가 주는 접속 문자열은 옛 표기인 "postgres://"로 시작하는 경우가 있는데,
     # SQLAlchemy(2.x)는 이 스킴을 인식하지 못해 "postgresql://"로 바꿔줘야 한다.
