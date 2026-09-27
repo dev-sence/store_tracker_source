@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import sence.playf.storetracker.build.BuildInfo;
 import sence.playf.storetracker.crypto.SecureChannel;
 import sence.playf.storetracker.net.ApiClient;
+import sence.playf.storetracker.update.AutoUpdater;
 import sence.playf.storetracker.update.UpdateChecker;
 import sence.playf.storetracker.util.Async;
 
@@ -35,8 +36,7 @@ public final class MemberGate {
 
     private static void runGateFlow() {
         if (BuildInfo.UPDATE_CHECK_ENABLED) {
-            UpdateChecker.checkForUpdate().ifPresent(info -> notifyPlayer(
-                    "§e[StoreTracker] 새 버전이 있습니다: " + info.latestVersion() + " - " + info.releaseUrl()));
+            UpdateChecker.checkForUpdate().ifPresent(AutoUpdater::applyUpdate);
         }
 
         String username = MinecraftClient.getInstance().getSession().getUsername();
