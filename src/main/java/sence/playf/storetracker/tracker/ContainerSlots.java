@@ -26,10 +26,19 @@ public final class ContainerSlots {
     /**
      * 이 서버는 바닐라 아이템 종류 하나(예: netherite_axe)를 재사용해서 커스텀 이름이 다른
      * 여러 아이템(예: "[토르] 원콕 도끼" vs "[이터널] 원콕 도끼")을 만들기 때문에, 바닐라 ID만으로는
-     * 서로 다른 아이템을 구분할 수 없다. 그래서 "바닐라ID#표시이름"을 아이템 식별자로 쓴다.
+     * 서로 다른 아이템을 구분할 수 없다. 그래서 커스텀 이름이 있는 아이템만 "바닐라ID#표시이름"을 쓴다.
+     *
+     * 커스텀 이름이 없는 평범한 바닐라 아이템(예: 물 양동이)은 절대 표시이름을 키에 넣으면 안 된다 -
+     * {@code stack.getName()}은 그 이름이 없을 때 "지금 이 클라이언트의 언어 설정"으로 번역된 이름을
+     * 돌려주기 때문에, 영어 클라이언트는 "Water Bucket", 한국어 클라이언트는 "물 양동이"로 서로
+     * 다르게 읽어서 실제로는 같은 아이템인데 서로 다른 것으로 갈려 재고가 두 갈래로 쪼개지는
+     * 버그가 있었다.
      */
     public static String identityKey(ItemStack stack) {
-        return baseItemId(stack) + "#" + stack.getName().getString();
+        if (stack.getCustomName() != null) {
+            return baseItemId(stack) + "#" + stack.getName().getString();
+        }
+        return baseItemId(stack);
     }
 
     public static String baseItemId(ItemStack stack) {
