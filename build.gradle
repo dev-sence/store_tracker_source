@@ -74,7 +74,7 @@ if (isPublicBuild) {
 processResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", gameVersion
-    inputs.property "loader_version", project.loader_version
+    inputs.property "loader_version_min", project.loader_version_min
     inputs.property "buildType", buildType
     // 이 값들이 바뀌었는데도 Gradle이 "달라진 게 없다"고 캐시를 재사용하는 걸 막기 위해 전부 입력으로 선언.
     inputs.property "apiBaseUrl", apiBaseUrl
@@ -86,7 +86,7 @@ processResources {
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": gameVersion,
-                "loader_version": project.loader_version
+                "loader_version": project.loader_version_min
     }
 
     filesMatching("assets/sence_storetracker/build.properties") {
