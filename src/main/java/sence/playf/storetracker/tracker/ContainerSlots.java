@@ -1,5 +1,6 @@
 package sence.playf.storetracker.tracker;
 
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.screen.GenericContainerScreenHandler;
@@ -35,7 +36,7 @@ public final class ContainerSlots {
      * 버그가 있었다.
      */
     public static String identityKey(ItemStack stack) {
-        if (stack.getCustomName() != null) {
+        if (stack.get(DataComponentTypes.CUSTOM_NAME) != null) {
             return baseItemId(stack) + "#" + stack.getName().getString();
         }
         return baseItemId(stack);
