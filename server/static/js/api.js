@@ -124,17 +124,52 @@ const StoreTrackerApi = {
     return data;
   },
 
-  async manualTransfer(mapKey, itemId, username, count, action) {
-    const res = await fetch('/api/admin/manual-transfer', {
+  async manualTransfer(mapKey, itemId, count, action) {
+    const res = await fetch('/api/manual-transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ map_key: mapKey, item_id: itemId, username, count, action }),
+      body: JSON.stringify({ map_key: mapKey, item_id: itemId, count, action }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || `request failed: ${res.status}`);
     }
     return data;
+  },
+
+  async fetchLoginLogs() {
+    const res = await fetch('/api/admin/login-logs');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async fetchApplications() {
+    const res = await fetch('/api/admin/applications');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async approveApplication(applicationId) {
+    const res = await fetch(`/api/admin/applications/${applicationId}/approve`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async rejectApplication(applicationId) {
+    const res = await fetch(`/api/admin/applications/${applicationId}/reject`, { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
   },
 
   async adjustInventory(mapKey, itemId, count) {

@@ -1,5 +1,4 @@
 import json
-import logging
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
@@ -9,11 +8,9 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 import discord_backoff
 import discord_oauth
 from models import (
-    ChestInventoryItem, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType, RequestLog,
-    TrackedChest, db,
+    ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger, PublicItemType,
+    RequestLog, TrackedChest, db,
 )
-
-logger = logging.getLogger(__name__)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -32,6 +29,17 @@ def _current_member():
     if not discord_id:
         return None
     return Member.query.filter_by(discord_id=discord_id).first()
+
+
+def _log_login(username, result, payload=None):
+    """디스코드 로그인 시도를 성공/실패 가리지 않고 전부 남긴다 - 로그인이 왜 안 되는지
+    문의가 왔을 때 개발자 탭에서 바로 원인을 확인할 수 있게 하려는 용도."""
+    db.session.add(RequestLog(
+        endpoint="discord-login", minecraft_username=username, ip=request.remote_addr,
+        result=result,
+        payload=json.dumps(payload, ensure_ascii=False, default=str) if payload is not None else None,
+    ))
+    db.session.commit()
 
 
 def _is_super_admin(member) -> bool:
@@ -95,15 +103,16 @@ def discord_login():
 @dashboard_bp.get("/discord/callback")
 def discord_callback():
     if request.args.get("error"):
-        logger.warning("discord callback: discord가 error 파라미터를 보냄: %s", request.args.get("error"))
+        _log_login(None, f"실패: Discord가 error 파라미터를 반환함 ({request.args.get('error')})",
+                   payload=dict(request.args))
         return redirect(url_for("dashboard.login", error="1"))
 
     state = request.args.get("state")
     expected_state = session.pop("oauth_state", None)
     code = request.args.get("code")
     if not code or not state or state != expected_state:
-        logger.warning("discord callback: state 불일치 (code_present=%s, state=%r, expected=%r, session_keys=%s)",
-                        bool(code), state, expected_state, list(session.keys()))
+        _log_login(None, "실패: state 불일치 (CSRF 방지 실패 또는 세션 만료)",
+                   payload={"code_present": bool(code), "state": state, "expected": expected_state})
         return redirect(url_for("dashboard.login", error="1"))
 
     token_data = discord_oauth.exchange_code(
@@ -113,24 +122,29 @@ def discord_callback():
         code,
     )
     if not token_data or "access_token" not in token_data:
-        logger.warning("discord callback: 토큰 교환 실패, token_data=%r", token_data)
         error_code = "rate_limited" if discord_backoff.in_backoff() else "1"
+        _log_login(None, f"실패: 토큰 교환 실패 ({error_code})", payload=token_data)
         return redirect(url_for("dashboard.login", error=error_code))
 
     user = discord_oauth.fetch_oauth_user(token_data["access_token"])
     if not user or "id" not in user:
-        logger.warning("discord callback: 유저 정보 조회 실패, user=%r", user)
         error_code = "rate_limited" if discord_backoff.in_backoff() else "1"
+        _log_login(None, f"실패: 유저 정보 조회 실패 ({error_code})", payload=user)
         return redirect(url_for("dashboard.login", error=error_code))
 
     discord_id = str(user["id"])
+    discord_username = user.get("global_name") or user.get("username") or "디스코드 사용자"
     session["discord_id"] = discord_id
-    session["discord_username"] = user.get("global_name") or user.get("username") or "디스코드 사용자"
+    session["discord_username"] = discord_username
     session["discord_avatar"] = discord_oauth.avatar_url(user)
     session.permanent = True
 
     member = Member.query.filter_by(discord_id=discord_id).first()
     if member is not None:
+        member.discord_username = discord_username
+        db.session.commit()
+        _log_login(member.minecraft_username, "성공: 기존 연동 계정 로그인",
+                   payload={"discord_id": discord_id, "discord_username": discord_username})
         return redirect(url_for("dashboard.index"))
 
     # 아직 이 디스코드 계정과 연결된 멤버가 없다 - 서버 별명에서 마크 닉네임을 추정해본다.
@@ -144,22 +158,31 @@ def discord_callback():
         ).first()
         if candidate is not None:
             candidate.discord_id = discord_id
+            candidate.discord_username = discord_username
             db.session.commit()
+            _log_login(candidate.minecraft_username, "성공: 별명 자동 매칭으로 최초 연동",
+                       payload={"discord_id": discord_id, "discord_username": discord_username, "guessed": guessed})
             return redirect(url_for("dashboard.index"))
 
+    _log_login(None, "미등록 - 닉네임 확인/가입 신청 페이지로 이동",
+               payload={"discord_id": discord_id, "discord_username": discord_username, "guessed": guessed})
     return redirect(url_for("dashboard.link_profile", guessed=guessed or ""))
 
 
 @dashboard_bp.get("/link")
 def link_profile():
-    if "discord_id" not in session:
+    discord_id = session.get("discord_id")
+    if not discord_id:
         return redirect(url_for("dashboard.login"))
     if _current_member() is not None:
         return redirect(url_for("dashboard.index"))
+
+    application = MemberApplication.query.filter_by(discord_id=discord_id).first()
     return render_template(
         "link.html",
-        guessed=request.args.get("guessed", ""),
+        guessed=application.minecraft_username if application else request.args.get("guessed", ""),
         error=request.args.get("error"),
+        pending=application is not None,
     )
 
 
@@ -170,17 +193,35 @@ def link_profile_submit():
         return redirect(url_for("dashboard.login"))
 
     username = (request.form.get("username") or "").strip()
+    if not username:
+        return redirect(url_for("dashboard.link_profile", error="1"))
+
     member = Member.query.filter(
         db.func.lower(Member.minecraft_username) == username.lower(),
         Member.discord_id.is_(None),
-    ).first() if username else None
+    ).first()
 
-    if member is None:
-        return redirect(url_for("dashboard.link_profile", error="1"))
+    if member is not None:
+        member.discord_id = discord_id
+        member.discord_username = session.get("discord_username")
+        db.session.commit()
+        _log_login(member.minecraft_username, "성공: 수동 입력으로 연동", payload={"username": username})
+        return redirect(url_for("dashboard.index"))
 
-    member.discord_id = discord_id
+    # 등록된 멤버와 매칭되지 않으면(아직 관리자가 등록 안 함) 바로 막지 않고 가입 신청을 올려서
+    # 개발자가 나중에 검토/승인할 수 있게 한다. 같은 디스코드 계정이 재제출하면 신청 내용만 갱신한다.
+    application = MemberApplication.query.filter_by(discord_id=discord_id).first()
+    if application is None:
+        application = MemberApplication(discord_id=discord_id)
+        db.session.add(application)
+    application.minecraft_username = username
+    application.discord_username = session.get("discord_username")
+    application.discord_avatar = session.get("discord_avatar")
+    application.requested_at = datetime.now(timezone.utc)
     db.session.commit()
-    return redirect(url_for("dashboard.index"))
+
+    _log_login(username, "가입 신청 접수/갱신", payload={"username": username, "discord_id": discord_id})
+    return redirect(url_for("dashboard.link_profile"))
 
 
 @dashboard_bp.get("/logout")
@@ -395,6 +436,59 @@ def admin_chest_logs():
     return jsonify(result)
 
 
+@dashboard_bp.get("/api/admin/login-logs")
+@developer_required
+def admin_login_logs():
+    """디스코드 로그인 시도 기록 (성공/실패 무관) - 로그인이 안 된다는 문의가 왔을 때 원인 확인용."""
+    limit = min(int(request.args.get("limit", 100)), 300)
+    rows = RequestLog.query.filter_by(endpoint="discord-login").order_by(RequestLog.id.desc()).limit(limit).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@dashboard_bp.get("/api/admin/applications")
+@developer_required
+def admin_list_applications():
+    apps = MemberApplication.query.order_by(MemberApplication.requested_at.desc()).all()
+    return jsonify([a.to_dict() for a in apps])
+
+
+@dashboard_bp.post("/api/admin/applications/<int:application_id>/approve")
+@developer_required
+def admin_approve_application(application_id):
+    application = MemberApplication.query.get(application_id)
+    if application is None:
+        return jsonify({"error": "not found"}), 404
+
+    if Member.query.filter(
+        db.func.lower(Member.minecraft_username) == application.minecraft_username.lower(),
+    ).first():
+        return jsonify({"error": "이미 등록된 닉네임입니다"}), 409
+
+    admin_member = _current_member()
+    member = Member(
+        minecraft_username=application.minecraft_username,
+        discord_id=application.discord_id,
+        discord_username=application.discord_username,
+        added_by=admin_member.minecraft_username,
+    )
+    db.session.add(member)
+    db.session.delete(application)
+    db.session.commit()
+    return jsonify(member.to_dict())
+
+
+@dashboard_bp.post("/api/admin/applications/<int:application_id>/reject")
+@developer_required
+def admin_reject_application(application_id):
+    application = MemberApplication.query.get(application_id)
+    if application is None:
+        return jsonify({"error": "not found"}), 404
+
+    db.session.delete(application)
+    db.session.commit()
+    return "", 204
+
+
 @dashboard_bp.post("/api/admin/members/<int:member_id>/developer")
 @super_admin_required
 def admin_toggle_member_developer(member_id):
@@ -486,29 +580,27 @@ def admin_adjust_inventory():
     return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
 
 
-@dashboard_bp.post("/api/admin/manual-transfer")
-@developer_required
-def admin_manual_transfer():
-    """상자를 거치지 않고 공용템을 가져가거나 반납한 경우를 위한 수동 사용/반납 기록.
-    실제 TAKE/DEPOSIT과 똑같이 재고와 보유 장부를 증감시키고 Event로도 남기지만,
-    실제 상자 상호작용 없이 개발자가 직접 입력한다는 걸 구분하려고 action은 HOLD(사용)/RELEASE(반납)를 쓴다."""
+@dashboard_bp.post("/api/manual-transfer")
+@login_required
+def manual_transfer():
+    """상자를 거치지 않고(=모드를 안 쓰는 사람이) 공용템을 가져가거나 반납한 경우를 위한
+    본인 계정 셀프 기록. 실제 TAKE/DEPOSIT과 똑같이 재고와 보유 장부를 증감시키고 Event로도
+    남기지만, 실제 상자 상호작용 없이 수동으로 입력됐다는 걸 구분하려고 action은
+    HOLD(사용)/RELEASE(반납)를 쓴다. 로그인한 본인 계정으로만 기록할 수 있다 (username은 서버가
+    세션에서 직접 채우고 클라이언트가 보낸 값은 쓰지 않는다 - 다른 사람 이름으로 조작 방지)."""
+    username = _current_member().minecraft_username
+
     data = request.get_json(silent=True) or {}
     map_key = data.get("map_key")
     item_id = data.get("item_id")
-    username = (data.get("username") or "").strip()
     action = data.get("action")
     try:
         count = int(data.get("count"))
     except (TypeError, ValueError):
         return jsonify({"error": "invalid count"}), 400
 
-    if not map_key or not item_id or not username or count <= 0 or action not in ("HOLD", "RELEASE"):
+    if not map_key or not item_id or count <= 0 or action not in ("HOLD", "RELEASE"):
         return jsonify({"error": "invalid request"}), 400
-
-    member = Member.query.filter(db.func.lower(Member.minecraft_username) == username.lower()).first()
-    if member is None:
-        return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
-    username = member.minecraft_username
 
     chest = TrackedChest.query.filter_by(map_key=map_key).first()
     if chest is None:
@@ -556,11 +648,9 @@ def admin_manual_transfer():
     db.session.add(event)
     db.session.flush()
 
-    admin_member = _current_member()
     db.session.add(RequestLog(
         endpoint="manual-transfer", minecraft_username=username, ip=request.remote_addr,
-        result=f"{'수동 사용' if action == 'HOLD' else '수동 반납'}: {display_name} x{count}"
-               f" (처리자: {admin_member.minecraft_username})",
+        result=f"{'수동 사용' if action == 'HOLD' else '수동 반납'}: {display_name} x{count} (본인 신고)",
         payload=json.dumps(data, ensure_ascii=False), event_id=event.id,
     ))
     db.session.commit()

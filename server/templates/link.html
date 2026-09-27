@@ -4,14 +4,22 @@
 <div class="login-wrapper" style="min-height:100vh; display:flex; justify-content:center; align-items:center; padding:20px;">
   <div class="login-container" style="text-align:center; max-width:400px; width:100%;">
     <h1 class="title" style="font-size:2rem; margin-bottom:1.2rem;">🔗 마크 닉네임 확인</h1>
+    {% if pending %}
     <div class="text-secondary small mb-4">
-      {% if guessed %}
-      디스코드 별명에서 <strong>{{ guessed }}</strong> 로 추정했지만 등록된 멤버와 자동으로 매칭되지 않았습니다.<br>
-      {% else %}
-      디스코드 별명에서 마크 닉네임을 찾지 못했습니다.<br>
-      {% endif %}
-      실제 마크 닉네임을 입력해주세요.
+      <strong>{{ guessed }}</strong>(으)로 가입 신청을 보냈습니다. 개발자 승인을 기다려주세요.<br>
+      닉네임이 잘못됐다면 아래에서 다시 제출해주세요.
     </div>
+    {% elif guessed %}
+    <div class="text-secondary small mb-4">
+      디스코드 별명에서 <strong>{{ guessed }}</strong> 로 추정했지만 등록된 멤버와 자동으로 매칭되지 않았습니다.<br>
+      실제 마크 닉네임을 입력해주세요. 등록된 멤버가 아니면 가입 신청이 올라갑니다.
+    </div>
+    {% else %}
+    <div class="text-secondary small mb-4">
+      디스코드 별명에서 마크 닉네임을 찾지 못했습니다.<br>
+      실제 마크 닉네임을 입력해주세요. 등록된 멤버가 아니면 가입 신청이 올라갑니다.
+    </div>
+    {% endif %}
     <form method="post" action="{{ url_for('dashboard.link_profile_submit') }}">
       <div class="mb-3 text-start">
         <label class="form-label small text-secondary">마인크래프트 닉네임</label>
@@ -19,7 +27,7 @@
                value="{{ guessed }}" placeholder="예: sence1012" autofocus required maxlength="32">
       </div>
       <button type="submit" class="btn btn-accent btn-lg w-100">
-        <span class="material-symbols-outlined" style="vertical-align:-6px;">check</span> 확인
+        <span class="material-symbols-outlined" style="vertical-align:-6px;">check</span> {{ '다시 신청' if pending else '확인' }}
       </button>
     </form>
     <div class="mt-3">

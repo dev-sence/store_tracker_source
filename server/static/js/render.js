@@ -191,7 +191,7 @@ const StoreTrackerRender = {
 
     container.innerHTML = list.map((m) => {
       const linked = m.discord_id
-        ? '<span class="badge bg-success">연동됨</span>'
+        ? `<span class="badge bg-success">연동됨</span><span class="text-secondary small">디코: ${escape(m.discord_username || '?')}</span>`
         : '<span class="badge bg-secondary">미연동</span>';
       const isSuperAdminRow = m.minecraft_username.toLowerCase() === 'sence1012';
       const isSelf = m.minecraft_username.toLowerCase() === currentUsername.toLowerCase();
@@ -234,19 +234,19 @@ const StoreTrackerRender = {
     });
   },
 
-  chestLogs(list) {
-    const container = document.getElementById('chestLogList');
+  _requestLogList(containerId, list, emptyText) {
+    const container = document.getElementById(containerId);
     if (!container) return;
     const escape = this.escapeHtml;
 
     if (!list.length) {
-      container.innerHTML = '<div class="text-secondary small">아직 기록된 상자 열림/닫힘 로그가 없습니다.</div>';
+      container.innerHTML = `<div class="text-secondary small">${escape(emptyText)}</div>`;
       return;
     }
 
     container.innerHTML = list.map((log) => {
       const firstLine = (log.result || '').split('\n')[0];
-      return `<div class="panel p-2 px-3 chest-log-row" style="cursor:pointer;" data-log='${escape(JSON.stringify(log))}'>
+      return `<div class="panel p-2 px-3 request-log-row" style="cursor:pointer;" data-log='${escape(JSON.stringify(log))}'>
         <div class="d-flex justify-content-between">
           <span class="small">${escape(log.minecraft_username || '(알 수 없음)')}</span>
           <span class="text-secondary small">${this.formatTime(log.created_at)}</span>
@@ -255,10 +255,50 @@ const StoreTrackerRender = {
       </div>`;
     }).join('');
 
-    container.querySelectorAll('.chest-log-row').forEach((row) => {
+    container.querySelectorAll('.request-log-row').forEach((row) => {
       row.addEventListener('click', () => {
         this.requestLogDetail(JSON.parse(row.dataset.log));
       });
+    });
+  },
+
+  chestLogs(list) {
+    this._requestLogList('chestLogList', list, '아직 기록된 상자 열림/닫힘 로그가 없습니다.');
+  },
+
+  loginLogs(list) {
+    this._requestLogList('loginLogList', list, '아직 기록된 로그인 시도가 없습니다.');
+  },
+
+  applications(list, onApprove, onReject) {
+    const container = document.getElementById('applicationList');
+    if (!container) return;
+    const escape = this.escapeHtml;
+
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">대기 중인 가입 신청이 없습니다.</div>';
+      return;
+    }
+
+    container.innerHTML = list.map((a) => `
+      <div class="panel p-2 px-3 d-flex align-items-center justify-content-between">
+        <div>
+          <span class="fw-semibold">${escape(a.minecraft_username)}</span>
+          <span class="text-secondary small ms-2">디코: ${escape(a.discord_username || '?')}</span>
+          <div class="text-secondary small">${this.formatTime(a.requested_at)}</div>
+        </div>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-accent application-approve-btn" data-application-id="${a.id}">승인</button>
+          <button class="btn btn-sm btn-outline-danger application-reject-btn" data-application-id="${a.id}">거절</button>
+        </div>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.application-approve-btn').forEach((btn) => {
+      btn.addEventListener('click', () => onApprove(btn.dataset.applicationId));
+    });
+    container.querySelectorAll('.application-reject-btn').forEach((btn) => {
+      btn.addEventListener('click', () => onReject(btn.dataset.applicationId));
     });
   },
 

@@ -19,6 +19,8 @@ class Member(db.Model):
     added_by = db.Column(db.String(64), nullable=True)
     # 웹 대시보드를 디스코드 로그인으로 여는 사람과 이 멤버를 연결해둔다 (아직 아무도 로그인 안 했으면 None).
     discord_id = db.Column(db.String(32), nullable=True, index=True)
+    # 로그인할 때마다 최신값으로 갱신 - 멤버 관리 목록에서 마크 닉네임과 같이 보여주기 위함.
+    discord_username = db.Column(db.String(64), nullable=True)
     # 개발자 탭(기능 토글/상세 로그/멤버·재고 관리)에 접근 가능한지 여부. sence1012(최고관리자)는
     # 이 값과 무관하게 항상 개발자로 취급되고, 이 값을 바꿀 수 있는 것도 sence1012뿐이다.
     is_developer = db.Column(db.Boolean, nullable=False, default=False)
@@ -31,7 +33,32 @@ class Member(db.Model):
             "added_at": self.added_at.isoformat(),
             "added_by": self.added_by,
             "discord_id": self.discord_id,
+            "discord_username": self.discord_username,
             "is_developer": self.is_developer,
+        }
+
+
+class MemberApplication(db.Model):
+    """아직 정식 멤버로 등록되지 않은 디스코드 계정이 마크 닉네임을 입력해서 올리는 가입 신청.
+    개발자가 승인하면 Member로 승격되고, 이 행은 지워진다. discord_id당 신청은 하나만 유지하고
+    (다시 제출하면 그냥 갱신) 승인 대기 상태를 보여줄 때도 이 값을 기준으로 판단한다."""
+    __tablename__ = "member_applications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    minecraft_username = db.Column(db.String(32), nullable=False)
+    discord_id = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    discord_username = db.Column(db.String(64), nullable=True)
+    discord_avatar = db.Column(db.String(256), nullable=True)
+    requested_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "minecraft_username": self.minecraft_username,
+            "discord_id": self.discord_id,
+            "discord_username": self.discord_username,
+            "discord_avatar": self.discord_avatar,
+            "requested_at": self.requested_at.isoformat(),
         }
 
 

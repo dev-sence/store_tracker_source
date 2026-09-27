@@ -18,20 +18,27 @@ logger = logging.getLogger(__name__)
 DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 
 
+_COLUMN_MIGRATIONS = [
+    ("members", "is_developer", "ALTER TABLE members ADD COLUMN is_developer BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("members", "discord_username", "ALTER TABLE members ADD COLUMN discord_username VARCHAR(64)"),
+]
+
+
 def _run_migrations():
     """db.create_all()은 없는 테이블만 만들고 기존 테이블에 컬럼을 추가해주진 않아서,
     새 컬럼이 생길 때마다 여기 idempotent하게 추가해준다 (SQLite/Postgres 둘 다 동작)."""
     inspector = db.inspect(db.engine)
-    if "members" not in inspector.get_table_names():
-        return
-    columns = {c["name"] for c in inspector.get_columns("members")}
-    if "is_developer" not in columns:
+    existing_tables = set(inspector.get_table_names())
+    for table, column, ddl in _COLUMN_MIGRATIONS:
+        if table not in existing_tables:
+            continue
+        columns = {c["name"] for c in inspector.get_columns(table)}
+        if column in columns:
+            continue
         with db.engine.connect() as conn:
-            conn.execute(db.text(
-                "ALTER TABLE members ADD COLUMN is_developer BOOLEAN NOT NULL DEFAULT FALSE"
-            ))
+            conn.execute(db.text(ddl))
             conn.commit()
-        logger.info("migration: members.is_developer 컬럼 추가함")
+        logger.info("migration: %s.%s 컬럼 추가함", table, column)
 
 
 def create_app():

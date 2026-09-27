@@ -10,10 +10,8 @@
       StoreTrackerRender.stats(data);
       StoreTrackerRender.events(data.events, isDeveloper);
       StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit);
-      if (isDeveloper) {
-        StoreTrackerRender.manualTransferItemOptions(data.inventory);
-        StoreTrackerRender.manualTransferLog(data.events.filter((e) => e.action === 'HOLD' || e.action === 'RELEASE'));
-      }
+      StoreTrackerRender.manualTransferItemOptions(data.inventory);
+      StoreTrackerRender.manualTransferLog(data.events.filter((e) => e.action === 'HOLD' || e.action === 'RELEASE'));
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }
@@ -53,32 +51,32 @@
     }
   }
 
-  function bindManualTransferForm() {
-    const form = document.getElementById('manualTransferForm');
-    if (!form) return;
+  function bindManualTransferButtons() {
+    const holdBtn = document.getElementById('manualTransferHoldBtn');
+    const releaseBtn = document.getElementById('manualTransferReleaseBtn');
+    if (!holdBtn || !releaseBtn) return;
 
-    form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
+    async function submit(action) {
       const itemId = document.getElementById('manualTransferItem').value;
-      const action = document.getElementById('manualTransferAction').value;
-      const username = document.getElementById('manualTransferUsername').value.trim();
       const count = Number(document.getElementById('manualTransferCount').value);
 
-      if (!itemId || !username || !count || count <= 0) {
-        StoreTrackerRender.toast('error', '아이템/닉네임/개수를 확인해주세요');
+      if (!itemId || !count || count <= 0) {
+        StoreTrackerRender.toast('error', '아이템/개수를 확인해주세요');
         return;
       }
 
       try {
-        await StoreTrackerApi.manualTransfer(currentMap, itemId, username, count, action);
+        await StoreTrackerApi.manualTransfer(currentMap, itemId, count, action);
         StoreTrackerRender.toast('success', action === 'HOLD' ? '수동 사용이 기록됐습니다' : '수동 반납이 기록됐습니다');
-        document.getElementById('manualTransferUsername').value = '';
         document.getElementById('manualTransferCount').value = '1';
         refresh(false);
       } catch (err) {
         Swal.fire({ icon: 'error', title: '처리 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
       }
-    });
+    }
+
+    holdBtn.addEventListener('click', () => submit('HOLD'));
+    releaseBtn.addEventListener('click', () => submit('RELEASE'));
   }
 
   function bindEventRowClicks() {
@@ -310,6 +308,59 @@
     }
   }
 
+  async function loadLoginLogs() {
+    if (!isDeveloper) return;
+    try {
+      const logs = await StoreTrackerApi.fetchLoginLogs();
+      StoreTrackerRender.loginLogs(logs);
+    } catch (err) {
+      const container = document.getElementById('loginLogList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  async function handleApproveApplication(applicationId) {
+    try {
+      await StoreTrackerApi.approveApplication(applicationId);
+      StoreTrackerRender.toast('success', '승인됐습니다');
+      loadApplications();
+      loadMembers();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '승인 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function handleRejectApplication(applicationId) {
+    const result = await Swal.fire({
+      title: '신청을 거절할까요?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '거절',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await StoreTrackerApi.rejectApplication(applicationId);
+      StoreTrackerRender.toast('success', '거절했습니다');
+      loadApplications();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '거절 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function loadApplications() {
+    if (!isDeveloper) return;
+    try {
+      const applications = await StoreTrackerApi.fetchApplications();
+      StoreTrackerRender.applications(applications, handleApproveApplication, handleRejectApplication);
+    } catch (err) {
+      const container = document.getElementById('applicationList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
   function bindAddMemberButton() {
     const btn = document.getElementById('addMemberBtn');
     if (!btn) return;
@@ -342,12 +393,14 @@
   bindDetailedLogToggle();
   bindEventRowClicks();
   bindAddMemberButton();
-  bindManualTransferForm();
+  bindManualTransferButtons();
   bindLogout();
   refresh(false);
   loadFeatureToggles();
   loadChestStrict();
   loadMembers();
   loadChestLogs();
+  loadLoginLogs();
+  loadApplications();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();
