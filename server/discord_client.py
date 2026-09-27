@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 
@@ -8,6 +9,35 @@ DISCORD_API_BASE = "https://discord.com/api/v10"
 
 TAKE_COLOR = 0xE74C3C  # 빨강 - 꺼냄
 DEPOSIT_COLOR = 0x2ECC71  # 초록 - 넣음
+
+# Discord(정확히는 그 앞단 Cloudflare)가 429를 주면, 같은 IP로 계속 두드릴수록 차단이 더 길어질 수 있다
+# (Cloudflare Error 1015). 그래서 429를 한 번 받으면 이 시각까지는 아예 요청을 시도하지 않고 건너뛴다.
+_backoff_until = 0.0
+_DEFAULT_BACKOFF_SECONDS = 30.0
+_MAX_BACKOFF_SECONDS = 300.0
+
+
+def _in_backoff() -> bool:
+    return time.monotonic() < _backoff_until
+
+
+def _apply_backoff(resp: requests.Response) -> None:
+    global _backoff_until
+    retry_after = _DEFAULT_BACKOFF_SECONDS
+    try:
+        # 정상적인 디스코드 API의 429는 JSON 바디에 retry_after(초)를 담아준다.
+        retry_after = float(resp.json().get("retry_after", retry_after))
+    except (ValueError, requests.JSONDecodeError, AttributeError):
+        # Cloudflare가 대신 막은 경우(HTML 응답, Error 1015 등)는 헤더를 대신 확인한다.
+        header_value = resp.headers.get("Retry-After")
+        if header_value:
+            try:
+                retry_after = float(header_value)
+            except ValueError:
+                pass
+    retry_after = min(max(retry_after, _DEFAULT_BACKOFF_SECONDS), _MAX_BACKOFF_SECONDS)
+    _backoff_until = time.monotonic() + retry_after
+    logger.warning("디스코드 429 - %.0f초간 추가 요청을 건너뜁니다.", retry_after)
 
 
 def post_event(bot_token: str, channel_id: str, event: dict) -> bool:
@@ -64,6 +94,10 @@ def post_dev_log(bot_token: str, channel_id: str, *, endpoint: str, username: st
 
 
 def _send(bot_token: str, channel_id: str, embed: dict) -> bool:
+    if _in_backoff():
+        logger.info("디스코드 429 쿨다운 중이라 메시지 전송을 건너뜁니다.")
+        return False
+
     try:
         resp = requests.post(
             f"{DISCORD_API_BASE}/channels/{channel_id}/messages",
@@ -71,8 +105,11 @@ def _send(bot_token: str, channel_id: str, embed: dict) -> bool:
             json={"embeds": [embed]},
             timeout=10,
         )
+        if resp.status_code == 429:
+            _apply_backoff(resp)
+            return False
         if resp.status_code >= 300:
-            logger.error("디스코드 메시지 전송 실패 (%s): %s", resp.status_code, resp.text)
+            logger.error("디스코드 메시지 전송 실패 (%s): %s", resp.status_code, resp.text[:300])
             return False
         return True
     except requests.RequestException:
@@ -85,6 +122,9 @@ def post_or_edit(bot_token: str, channel_id: str, message_id: str | None, embeds
     새로 게시한다. 최종적으로 사용된(새로 만들어졌을 수도 있는) message_id를 반환한다."""
     if not bot_token or not channel_id:
         return None
+    if _in_backoff():
+        logger.info("디스코드 429 쿨다운 중이라 대시보드 갱신을 건너뜁니다.")
+        return message_id
 
     headers = {"Authorization": f"Bot {bot_token}"}
     body = {"embeds": embeds}
@@ -97,7 +137,10 @@ def post_or_edit(bot_token: str, channel_id: str, message_id: str | None, embeds
             )
             if resp.status_code < 300:
                 return message_id
-            logger.warning("대시보드 메시지 수정 실패 (%s), 새로 게시합니다: %s", resp.status_code, resp.text)
+            if resp.status_code == 429:
+                _apply_backoff(resp)
+                return message_id
+            logger.warning("대시보드 메시지 수정 실패 (%s), 새로 게시합니다: %s", resp.status_code, resp.text[:300])
         except requests.RequestException:
             logger.exception("대시보드 메시지 수정 중 오류, 새로 게시합니다")
 
@@ -106,8 +149,11 @@ def post_or_edit(bot_token: str, channel_id: str, message_id: str | None, embeds
             f"{DISCORD_API_BASE}/channels/{channel_id}/messages",
             headers=headers, json=body, timeout=10,
         )
+        if resp.status_code == 429:
+            _apply_backoff(resp)
+            return None
         if resp.status_code >= 300:
-            logger.error("대시보드 메시지 게시 실패 (%s): %s", resp.status_code, resp.text)
+            logger.error("대시보드 메시지 게시 실패 (%s): %s", resp.status_code, resp.text[:300])
             return None
         return resp.json().get("id")
     except requests.RequestException:

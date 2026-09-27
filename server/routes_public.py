@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timezone
 
 from cryptography.exceptions import InvalidTag
@@ -16,6 +17,13 @@ public_bp = Blueprint("public", __name__, url_prefix="/api")
 
 VALID_ACTIONS = ("TAKE", "DEPOSIT", "HOLD", "RELEASE")
 VALID_TOGGLE_KEYS = ("label_overlay", "public_tag", "passthrough_tracking", "chest_log")
+
+# 상자 하나에서 아이템 여러 종류를 한꺼번에 넣고/빼면 이벤트마다 대시보드를 다시 그리게 되는데,
+# 그때마다 디스코드에 PATCH를 날리면 채널당 요청 제한(5회/5초)에 금방 걸린다(Discord/Cloudflare 429).
+# 그래서 이 간격 안에 다시 호출되면 이번 갱신은 건너뛴다 - DB는 이미 최신이니 다음 이벤트가 올 때
+# (또는 다음에 상자를 여닫을 때) 자연스럽게 최신 상태로 따라잡는다.
+_DASHBOARD_REFRESH_MIN_INTERVAL = 3.0
+_last_dashboard_refresh: dict[str, float] = {}
 
 
 def _parse_encrypted_body():
@@ -105,6 +113,12 @@ def _refresh_dashboard(map_key):
     channel_id = current_app.config["DISCORD_INVENTORY_CHANNEL_ID"]
     if not bot_token or not channel_id:
         return
+
+    now = time.monotonic()
+    last = _last_dashboard_refresh.get(map_key, 0.0)
+    if now - last < _DASHBOARD_REFRESH_MIN_INTERVAL:
+        return
+    _last_dashboard_refresh[map_key] = now
 
     inventory_rows = ChestInventoryItem.query.filter_by(map_key=map_key).all()
     ledger_rows = PlayerItemLedger.query.filter_by(map_key=map_key).filter(
