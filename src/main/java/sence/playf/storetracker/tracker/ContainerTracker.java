@@ -41,6 +41,12 @@ import java.util.Set;
  * - 서버에 등록된 "공용템 상자"라면 모든 아이템을 추적하고 제목을 강조 표시한다.
  * - 그 외의(경유) 상자는 이미 공용템으로 알려진 아이템 타입의 이동만 추적한다
  *   (다른 상자를 거쳐 갔다가 공용템 상자로 돌아오는 흐름을 최대한 따라가기 위함).
+ *
+ * 입출고 감지는 "열림~닫힘 전체 구간"이 아니라 클릭 한 번 단위로 이뤄진다({@link #beforeClick()}/
+ * {@link #afterClick()}). 바닐라 상자는 여러 플레이어가 동시에 열어볼 수 있는데, 열림~닫힘 전체를
+ * 기준으로 diff를 뜨면 그 사이에 "다른 사람"이 넣거나 뺀 것까지 내가 한 것처럼 잘못 기록되고 중복으로
+ * 찍히는 문제가 있었다. 클릭 직전/직후로 범위를 좁히면 그 순간 실제로 내가 클릭해서 생긴 변화만 잡을 수
+ * 있어서 이 문제가 없다.
  */
 public final class ContainerTracker {
     private static final Logger LOGGER = LoggerFactory.getLogger("sence_storetracker");
@@ -48,8 +54,6 @@ public final class ContainerTracker {
     private static BlockPos pendingPos;
     private static String pendingDimension;
 
-    private static Map<String, Integer> openSnapshot;
-    private static Map<String, String> itemNames;
     // 상자를 아주 빠르게 열었다 닫으면, 2틱 지연됐던 "열림 스냅샷" 콜백이 이미 닫힌 뒤에 실행돼서
     // 그 사이에 연 다른 상자의 상태를 오염시킬 수 있다. 그걸 막기 위한 세션 번호.
     private static long sessionCounter = 0;
@@ -57,6 +61,11 @@ public final class ContainerTracker {
     private static volatile ScreenHandler activeHandler;
     private static volatile Integer activeSlotCount;
     private static volatile ChestRegistry.RegisteredChest activeChest;
+    private static volatile String activeDimension;
+    private static volatile BlockPos activePos;
+
+    // 클릭 한 번의 전/후 스냅샷을 잠깐 들고 있는 용도 (beforeClick -> afterClick 사이에만 값이 있음).
+    private static Map<String, Integer> pendingClickBefore;
 
     private static SecureChannel channel;
 
@@ -112,19 +121,22 @@ public final class ContainerTracker {
             activeHandler = handler;
             activeSlotCount = slotCount;
             activeChest = registered.orElse(null);
+            activeDimension = dimension;
+            activePos = pos;
 
             long session = ++sessionCounter;
 
             // 상자를 여는 순간엔 서버가 아직 실제 아이템 내용을 안 보내줘서 슬롯이 비어있다.
             // 바로 스냅샷을 뜨면 원래 있던 아이템이 전부 "방금 넣음"으로 오인식되므로 몇 틱 기다렸다가 뜬다.
+            // (이 스냅샷은 개발자 로그용 감사 기록일 뿐, 입출고 감지에는 더 이상 쓰이지 않는다.)
             ClientDelay.runAfterTicks(2, () -> {
                 if (session != sessionCounter) {
                     // 그 사이 이 상자가 닫히고 다른 상자가 열렸다 - 이 스냅샷은 이미 낡은 것이라 버린다.
                     return;
                 }
-                openSnapshot = ContainerSlots.snapshotCounts(handler, slotCount);
-                itemNames = ContainerSlots.snapshotNames(handler, slotCount);
-                sendChestLog("OPEN", chestLabel, dimension, pos, openSnapshot, itemNames);
+                Map<String, Integer> counts = ContainerSlots.snapshotCounts(handler, slotCount);
+                Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
+                sendChestLog("OPEN", chestLabel, dimension, pos, counts, names);
             });
 
             registered.ifPresent(chest -> {
@@ -157,34 +169,61 @@ public final class ContainerTracker {
                 activeHandler = null;
                 activeSlotCount = null;
                 activeChest = null;
+                activeDimension = null;
+                activePos = null;
+                pendingClickBefore = null;
                 onContainerClosed(handler, slotCount, chestLabel, dimension, pos);
             });
         });
     }
 
-    private static void onContainerClosed(ScreenHandler handler, int slotCount, String chestLabel,
-                                           String dimension, BlockPos pos) {
-        Map<String, Integer> before = openSnapshot;
-        Map<String, String> names = itemNames;
-        openSnapshot = null;
-        itemNames = null;
-        if (before == null) {
+    /** 슬롯 클릭 처리(onMouseClick) 직전에 호출한다 - 지금 상자 슬롯 상태를 기록해둔다. */
+    public static void beforeClick() {
+        ScreenHandler handler = activeHandler;
+        Integer slotCount = activeSlotCount;
+        if (handler == null || slotCount == null) {
+            pendingClickBefore = null;
+            return;
+        }
+        pendingClickBefore = ContainerSlots.snapshotCounts(handler, slotCount);
+    }
+
+    /**
+     * 슬롯 클릭 처리 직후에 호출한다 - beforeClick 이후 이 클릭 한 번으로 상자 슬롯에 생긴 변화만
+     * 계산해서 이벤트로 기록한다. 그 사이에 다른 플레이어가 만든 변화는 여기 포함되지 않는다
+     * (다른 플레이어의 변화는 그 사람 자신의 클라이언트가 자신의 beforeClick/afterClick으로 잡는다).
+     */
+    public static void afterClick() {
+        Map<String, Integer> before = pendingClickBefore;
+        pendingClickBefore = null;
+
+        ScreenHandler handler = activeHandler;
+        Integer slotCount = activeSlotCount;
+        ChestRegistry.RegisteredChest chest = activeChest;
+        String dimension = activeDimension;
+        BlockPos pos = activePos;
+        if (before == null || handler == null || slotCount == null || dimension == null || pos == null) {
             return;
         }
 
         Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
-        names.putAll(ContainerSlots.snapshotNames(handler, slotCount));
-        sendChestLog("CLOSE", chestLabel, dimension, pos, after, names);
+        Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
+        before.keySet().forEach(id -> names.putIfAbsent(id, id));
 
+        String chestLabel = chest != null ? chest.label() : null;
         boolean isRegisteredChest = chestLabel != null;
-        MinecraftClient client = MinecraftClient.getInstance();
-        String username = client.getSession().getUsername();
-        String mapKey = MapKey.current(client);
-        String occurredAt = Instant.now().toString();
 
         Set<String> itemIds = new HashSet<>();
         itemIds.addAll(before.keySet());
         itemIds.addAll(after.keySet());
+        if (itemIds.isEmpty()) {
+            return;
+        }
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        String username = client.getSession().getUsername();
+        String mapKey = MapKey.current(client);
+        String occurredAt = Instant.now().toString();
 
         for (String itemId : itemIds) {
             int delta = after.getOrDefault(itemId, 0) - before.getOrDefault(itemId, 0);
@@ -231,6 +270,14 @@ public final class ContainerTracker {
                 }
             });
         }
+    }
+
+    /** 상자가 닫힐 때의 전체 내용물 스냅샷을 개발자 로그용으로 서버에 보낸다 (감사용, 입출고 감지와는 무관). */
+    private static void onContainerClosed(ScreenHandler handler, int slotCount, String chestLabel,
+                                           String dimension, BlockPos pos) {
+        Map<String, Integer> counts = ContainerSlots.snapshotCounts(handler, slotCount);
+        Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
+        sendChestLog("CLOSE", chestLabel, dimension, pos, counts, names);
     }
 
     /** 등록된 공용템 상자를 열거나 닫는 순간의 전체 내용물 스냅샷을 개발자 로그용으로 서버에 보낸다. */
