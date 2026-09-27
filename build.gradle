@@ -32,11 +32,12 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
-// dev 빌드: 로컬 Flask 서버 대상, 업데이트 체크/멤버 게이트 비활성화 (테스트 편의).
+// dev 빌드: 기본적으로 실제 라이브 서버를 바라본다 (관리자 명령어로 운영 서버를 직접 관리하기 위함).
+// 로컬 Flask로 따로 테스트하고 싶으면 -PdevApiBaseUrl=http://localhost:5000 으로 덮어쓴다.
 // public 빌드: 배포용 API 주소 필요, 업데이트 체크/멤버 게이트 활성화.
 def apiBaseUrl = isPublicBuild
         ? (project.findProperty('publicApiBaseUrl') ?: 'https://TODO-set-production-url')
-        : 'http://localhost:5000'
+        : (project.findProperty('devApiBaseUrl') ?: 'https://store-tracker-source.onrender.com')
 def githubRepo = project.findProperty('githubRepo') ?: 'TODO/Sence_StoreTracker'
 // Flask의 APP_SECRET(.env)과 반드시 동일한 값이어야 함. 빌드 시 -PappSecret=... 로 주입.
 // (기본값은 로컬 개발용 자리표시자이며 절대 실제 배포에 그대로 쓰지 말 것)
