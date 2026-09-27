@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
@@ -6,6 +7,8 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 
 import discord_oauth
 from models import ChestInventoryItem, Event, Member, PlayerItemLedger, PublicItemType, TrackedChest, db
+
+logger = logging.getLogger(__name__)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -53,12 +56,15 @@ def discord_login():
 @dashboard_bp.get("/discord/callback")
 def discord_callback():
     if request.args.get("error"):
+        logger.warning("discord callback: discord가 error 파라미터를 보냄: %s", request.args.get("error"))
         return redirect(url_for("dashboard.login", error="1"))
 
     state = request.args.get("state")
     expected_state = session.pop("oauth_state", None)
     code = request.args.get("code")
     if not code or not state or state != expected_state:
+        logger.warning("discord callback: state 불일치 (code_present=%s, state=%r, expected=%r, session_keys=%s)",
+                        bool(code), state, expected_state, list(session.keys()))
         return redirect(url_for("dashboard.login", error="1"))
 
     token_data = discord_oauth.exchange_code(
@@ -68,10 +74,12 @@ def discord_callback():
         code,
     )
     if not token_data or "access_token" not in token_data:
+        logger.warning("discord callback: 토큰 교환 실패, token_data=%r", token_data)
         return redirect(url_for("dashboard.login", error="1"))
 
     user = discord_oauth.fetch_oauth_user(token_data["access_token"])
     if not user or "id" not in user:
+        logger.warning("discord callback: 유저 정보 조회 실패, user=%r", user)
         return redirect(url_for("dashboard.login", error="1"))
 
     discord_id = str(user["id"])

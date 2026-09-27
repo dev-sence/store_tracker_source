@@ -1,6 +1,9 @@
+import logging
 import re
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
@@ -36,9 +39,11 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
             timeout=10,
         )
         if resp.status_code != 200:
+            logger.warning("토큰 교환 실패 (status=%s): %s", resp.status_code, resp.text[:300])
             return None
         return resp.json()
     except requests.RequestException:
+        logger.exception("토큰 교환 중 오류")
         return None
 
 
@@ -51,9 +56,11 @@ def fetch_oauth_user(access_token: str) -> dict | None:
             timeout=10,
         )
         if resp.status_code != 200:
+            logger.warning("유저 정보 조회 실패 (status=%s): %s", resp.status_code, resp.text[:300])
             return None
         return resp.json()
     except requests.RequestException:
+        logger.exception("유저 정보 조회 중 오류")
         return None
 
 

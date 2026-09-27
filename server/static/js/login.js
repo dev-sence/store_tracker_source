@@ -7,7 +7,7 @@
   Swal.fire({
     icon: 'error',
     title: '로그인 실패',
-    text: '토큰이 올바르지 않습니다.',
+    text: '디스코드 로그인에 실패했습니다. 다시 시도해주세요.',
     background: '#121821',
     color: '#e8edf2',
     confirmButtonColor: '#f1c40f',
