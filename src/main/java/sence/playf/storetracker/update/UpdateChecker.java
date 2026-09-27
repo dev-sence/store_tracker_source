@@ -1,9 +1,9 @@
 package sence.playf.storetracker.update;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.fabricmc.loader.api.FabricLoader;
 import sence.playf.storetracker.build.BuildInfo;
 
 import java.io.IOException;
@@ -52,15 +52,20 @@ public final class UpdateChecker {
                 return Optional.empty();
             }
 
+            // 한 릴리스에 지원 마크 버전별로 jar가 여러 개 올라오므로("Sence_StoreTracker-1.21.11.jar" 등),
+            // 지금 실행 중인 마크 버전과 정확히 이름이 일치하는 것만 자동 설치 대상으로 고른다.
+            // 아직 그 버전용 빌드가 없으면(새 마크 버전이 막 나왔을 때 등) 못 찾을 수 있는데,
+            // 그럴 땐 AutoUpdater가 링크만 안내하는 쪽으로 자연스럽게 넘어간다.
+            String gameVersion = FabricLoader.getInstance().getRawGameVersion();
+            String expectedAssetName = "Sence_StoreTracker-" + gameVersion + ".jar";
+
             String assetName = null;
             String assetDownloadUrl = null;
             if (json.has("assets")) {
                 for (JsonElement element : json.getAsJsonArray("assets")) {
                     JsonObject asset = element.getAsJsonObject();
                     String name = asset.get("name").getAsString();
-                    // 지금은 릴리스마다 배포용 jar가 하나뿐이라, "-sources.jar"/"-dev" 접미사가
-                    // 아닌 것 하나만 고른다. (나중에 마크 버전별로 여러 개 올라오면 여기서 버전도 맞춰봐야 함.)
-                    if (name.endsWith(".jar") && !name.endsWith("-sources.jar") && !name.contains("-dev")) {
+                    if (name.equals(expectedAssetName)) {
                         assetName = name;
                         assetDownloadUrl = asset.get("browser_download_url").getAsString();
                         break;

@@ -14,6 +14,12 @@ base {
     archivesName = project.archives_base_name + (isPublicBuild ? '' : '-dev')
 }
 
+// 여러 마크 버전용으로 빌드할 때 -PgameVersion=1.21.11 -PyarnMappings=1.21.11+build.6
+// -PfabricApiVersion=0.141.6+1.21.11 처럼 덮어쓴다. 안 주면 gradle.properties의 기본값(1.21.4) 사용.
+def gameVersion = project.findProperty('gameVersion') ?: project.minecraft_version
+def yarnMappings = project.findProperty('yarnMappings') ?: project.yarn_mappings
+def fabricApiVersion = project.findProperty('fabricApiVersion') ?: project.fabric_version
+
 repositories {
     // Add repositories to retrieve artifacts from in here.
     // You should only use this when depending on other mods because
@@ -24,12 +30,12 @@ repositories {
 
 dependencies {
     // To change the versions see the gradle.properties file
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    minecraft "com.mojang:minecraft:${gameVersion}"
+    mappings "net.fabricmc:yarn:${yarnMappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
     // Fabric API. This is technically optional, but you probably want it anyway.
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
 }
 
 // dev 빌드: 기본적으로 실제 라이브 서버를 바라본다 (관리자 명령어로 운영 서버를 직접 관리하기 위함).
@@ -67,7 +73,7 @@ if (isPublicBuild) {
 
 processResources {
     inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "minecraft_version", gameVersion
     inputs.property "loader_version", project.loader_version
     inputs.property "buildType", buildType
     // 이 값들이 바뀌었는데도 Gradle이 "달라진 게 없다"고 캐시를 재사용하는 걸 막기 위해 전부 입력으로 선언.
@@ -79,7 +85,7 @@ processResources {
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
+                "minecraft_version": gameVersion,
                 "loader_version": project.loader_version
     }
 
