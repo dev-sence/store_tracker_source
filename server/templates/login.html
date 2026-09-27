@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block title %}로그인 - Sence StoreTracker{% endblock %}
 {% block body %}
-<div class="d-flex align-items-center justify-content-center" style="min-height:100vh;">
-  <div class="panel p-4 p-md-5 login-card text-center">
-    <div class="mb-3" style="font-size:2.2rem;">📦</div>
-    <h4 class="fw-bold mb-1">Sence StoreTracker</h4>
-    <div class="text-secondary small mb-4">등록된 섬원만 디스코드로 로그인할 수 있습니다</div>
+<div class="login-wrapper" style="min-height:100vh; display:flex; justify-content:center; align-items:center; padding:20px;">
+  <div class="login-container" style="text-align:center; max-width:400px; width:100%;">
+    <h1 class="title" style="font-size:2.5rem; margin-bottom:2rem;">📦 Sence StoreTracker</h1>
+    <div class="text-secondary mb-4">등록된 섬원만 디스코드로 로그인할 수 있습니다</div>
     <a href="{{ url_for('dashboard.discord_login') }}" class="btn btn-discord btn-lg w-100">
       <i class="bi bi-discord me-2"></i> Discord로 로그인
     </a>

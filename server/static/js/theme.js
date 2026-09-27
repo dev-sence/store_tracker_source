@@ -7,11 +7,10 @@
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.setAttribute('data-bs-theme', theme);
     const icon = document.getElementById('themeToggleIcon');
-    if (icon) {
-      icon.className = theme === 'light' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
-    }
+    const text = document.getElementById('themeToggleText');
+    if (icon) icon.textContent = theme === 'light' ? '☀️' : '🌙';
+    if (text) text.textContent = theme === 'light' ? '라이트 모드' : '다크 모드';
   }
 
   function toggleTheme() {

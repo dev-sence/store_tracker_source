@@ -28,8 +28,8 @@
 
   function bindRefreshButton() {
     const btn = document.getElementById('refreshBtn');
+    const icon = document.getElementById('refreshIcon');
     btn.addEventListener('click', () => {
-      const icon = btn.querySelector('i');
       icon.classList.remove('refresh-spin');
       // eslint-disable-next-line no-unused-expressions
       icon.offsetWidth; // 리플로우를 강제해서 연속 클릭에도 애니메이션이 다시 시작되게 한다.
@@ -38,11 +38,40 @@
     });
   }
 
-  function bindProfileWidget() {
-    const widget = document.getElementById('profileWidget');
-    if (!widget) return;
-    widget.addEventListener('click', async () => {
-      const nameEl = document.getElementById('profileName');
+  function bindSidebarNav() {
+    const items = document.querySelectorAll('.nav-item[data-section]');
+    items.forEach((item) => {
+      item.addEventListener('click', () => {
+        items.forEach((i) => i.classList.remove('active'));
+        item.classList.add('active');
+        document.querySelectorAll('.main-content > .panel[id^="section-"]').forEach((panel) => {
+          panel.style.display = panel.id === `section-${item.dataset.section}` ? '' : 'none';
+        });
+        closeMobileSidebar();
+      });
+    });
+  }
+
+  function openMobileSidebar() {
+    document.getElementById('sidebar').classList.add('active');
+    document.getElementById('modalBackdrop').classList.add('active');
+  }
+
+  function closeMobileSidebar() {
+    document.getElementById('sidebar').classList.remove('active');
+    document.getElementById('modalBackdrop').classList.remove('active');
+  }
+
+  function bindMobileMenu() {
+    document.getElementById('menuToggle').addEventListener('click', openMobileSidebar);
+    document.getElementById('closeMenu').addEventListener('click', closeMobileSidebar);
+    document.getElementById('modalBackdrop').addEventListener('click', closeMobileSidebar);
+  }
+
+  function bindProfileName() {
+    const nameEl = document.getElementById('profileName');
+    if (!nameEl) return;
+    nameEl.addEventListener('click', async () => {
       const { value: username } = await Swal.fire({
         title: '마크 닉네임 수정',
         input: 'text',
@@ -51,9 +80,7 @@
         showCancelButton: true,
         confirmButtonText: '저장',
         cancelButtonText: '취소',
-        background: '#121821',
-        color: '#e8edf2',
-        confirmButtonColor: '#f1c40f',
+        ...StoreTrackerRender.swalTheme(),
         inputValidator: (value) => (!value || !value.trim() ? '닉네임을 입력해주세요.' : undefined),
       });
 
@@ -71,9 +98,7 @@
           icon: 'error',
           title: '저장 실패',
           text: err.message,
-          background: '#121821',
-          color: '#e8edf2',
-          confirmButtonColor: '#f1c40f',
+          ...StoreTrackerRender.swalTheme(),
         });
       }
     });
@@ -88,9 +113,7 @@
         showCancelButton: true,
         confirmButtonText: '로그아웃',
         cancelButtonText: '취소',
-        background: '#121821',
-        color: '#e8edf2',
-        confirmButtonColor: '#f1c40f',
+        ...StoreTrackerRender.swalTheme(),
       }).then((result) => {
         if (result.isConfirmed) {
           window.location.href = '/logout';
@@ -101,7 +124,9 @@
 
   bindMapSelect();
   bindRefreshButton();
-  bindProfileWidget();
+  bindSidebarNav();
+  bindMobileMenu();
+  bindProfileName();
   bindLogout();
   refresh(false);
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);

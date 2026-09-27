@@ -1,4 +1,11 @@
 const StoreTrackerRender = {
+  swalTheme() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    return isLight
+      ? { background: '#ffffff', color: '#24292f', confirmButtonColor: '#d4a700' }
+      : { background: '#161b22', color: '#c9d1d9', confirmButtonColor: '#d4a700' };
+  },
+
   escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -81,8 +88,7 @@ const StoreTrackerRender = {
       title,
       showConfirmButton: false,
       timer: icon === 'error' ? 1800 : 1200,
-      background: '#121821',
-      color: '#e8edf2',
+      ...this.swalTheme(),
     });
   },
 };

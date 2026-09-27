@@ -3,100 +3,123 @@
 {% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}"{% endblock %}
 {% block theme_toggle %}{% endblock %}
 {% block body %}
-<nav class="navbar navbar-expand-lg border-bottom" style="border-color: var(--border-soft) !important;">
-  <div class="container-fluid px-4">
-    <span class="navbar-brand"><i class="bi bi-box-seam me-2"></i>Sence StoreTracker</span>
-    <div class="d-flex align-items-center gap-3 ms-auto">
-      <span class="text-secondary small d-none d-md-inline"><span class="live-dot me-1"></span>실시간 (15초마다 갱신)</span>
+<nav class="navbar">
+  <div class="navbar-left">
+    <button class="menu-toggle" id="menuToggle">☰</button>
+    <h1 class="navbar-title"><span class="material-symbols-outlined" style="vertical-align:-6px;">inventory_2</span>Sence StoreTracker</h1>
+  </div>
+  <div class="navbar-right">
+    <div class="profile-group">
+      {% if discord_avatar %}
+      <img src="{{ discord_avatar }}" class="profile-img" alt="">
+      {% else %}
+      <span class="material-symbols-outlined" style="font-size:1.6rem;">account_circle</span>
+      {% endif %}
+      <span class="profile-name" id="profileName" title="클릭해서 마크 닉네임 수정">{{ profile_name }}</span>
+      <a href="#" id="logoutLink" class="btn-logout">
+        <span class="material-symbols-outlined" style="font-size:1rem;">logout</span> 로그아웃
+      </a>
+    </div>
+    <button class="theme-btn" id="themeToggleBtn">
+      <span class="theme-icon" id="themeToggleIcon">🌙</span>
+      <span class="theme-text" id="themeToggleText">다크 모드</span>
+    </button>
+  </div>
+</nav>
+
+<div class="modal-backdrop" id="modalBackdrop"></div>
+
+<div class="wrapper">
+  <div class="sidebar" id="sidebar">
+    <button class="close-menu" id="closeMenu">×</button>
+    <div class="sidebar-main">
+      <div class="sidebar-header">메뉴</div>
+      <div class="nav-list">
+        <div class="nav-item active" data-section="logs">
+          <span class="material-symbols-outlined">history</span>
+          <span>입출고 로그</span>
+        </div>
+        <div class="nav-item" data-section="inventory">
+          <span class="material-symbols-outlined">inventory_2</span>
+          <span>재고 현황</span>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-buttons">
       {% if map_keys %}
-      <select class="form-select form-select-sm" id="mapSelect" style="width:auto;">
+      <select class="map-select" id="mapSelect">
         {% for m in map_keys %}
         <option value="{{ m }}" {% if m == selected_map %}selected{% endif %}>{{ m }}</option>
         {% endfor %}
       </select>
       {% endif %}
-      <button class="btn btn-sm btn-outline-light" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i></button>
-      <button type="button" class="theme-toggle-btn" id="themeToggleBtn" title="테마 전환">
-        <i class="bi bi-moon-stars-fill" id="themeToggleIcon"></i>
+      <button class="sidebar-btn" id="refreshBtn">
+        <span class="material-symbols-outlined" id="refreshIcon">refresh</span> 새로고침
       </button>
-      <div class="profile-widget" id="profileWidget" title="클릭해서 마크 닉네임 수정">
-        {% if discord_avatar %}
-        <img src="{{ discord_avatar }}" class="profile-avatar" alt="">
-        {% else %}
-        <i class="bi bi-person-circle" style="font-size:1.4rem;"></i>
-        {% endif %}
-        <span class="small" id="profileName">{{ profile_name }}</span>
-        <i class="bi bi-pencil-fill text-secondary" style="font-size:.7rem;"></i>
-      </div>
-      <a href="#" id="logoutLink" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right"></i> 로그아웃</a>
-    </div>
-  </div>
-</nav>
-
-<div class="container-fluid px-4 py-4">
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-      <div class="stat-card d-flex justify-content-between align-items-center">
-        <div><div class="label">등록 멤버</div><div class="value" id="statMembers">-</div></div>
-        <i class="bi bi-people"></i>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="stat-card d-flex justify-content-between align-items-center">
-        <div><div class="label">등록 상자</div><div class="value" id="statChests">-</div></div>
-        <i class="bi bi-archive"></i>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="stat-card d-flex justify-content-between align-items-center">
-        <div><div class="label">공용템 종류</div><div class="value" id="statItemTypes">-</div></div>
-        <i class="bi bi-tags"></i>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="stat-card d-flex justify-content-between align-items-center">
-        <div><div class="label">오늘 이벤트</div><div class="value" id="statToday">-</div></div>
-        <i class="bi bi-graph-up-arrow"></i>
-      </div>
     </div>
   </div>
 
-  <div class="row g-3">
-    <div class="col-lg-7">
-      <div class="panel p-3 p-md-4 h-100">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <div class="section-title"><i class="bi bi-clock-history me-2"></i>최근 입출고 로그</div>
+  <div class="main-content">
+    <div class="d-flex justify-content-end mb-3">
+      <span class="text-secondary small"><span class="live-dot me-1"></span>실시간 (15초마다 갱신)</span>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-lg-3">
+        <div class="stat-card">
+          <div><div class="label">등록 멤버</div><div class="value" id="statMembers">-</div></div>
+          <span class="material-symbols-outlined">group</span>
         </div>
-        <div style="max-height: 70vh; overflow-y: auto;">
-          <table class="table table-hover align-middle mb-0">
-            <thead>
-              <tr class="text-secondary small">
-                <th>시간</th><th>플레이어</th><th>아이템</th><th>동작</th><th class="text-end">수량</th><th>상자</th>
-              </tr>
-            </thead>
-            <tbody id="eventsBody">
-              <tr><td colspan="6" class="text-center text-secondary py-4">불러오는 중...</td></tr>
-            </tbody>
-          </table>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="stat-card">
+          <div><div class="label">등록 상자</div><div class="value" id="statChests">-</div></div>
+          <span class="material-symbols-outlined">inventory</span>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="stat-card">
+          <div><div class="label">공용템 종류</div><div class="value" id="statItemTypes">-</div></div>
+          <span class="material-symbols-outlined">sell</span>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="stat-card">
+          <div><div class="label">오늘 이벤트</div><div class="value" id="statToday">-</div></div>
+          <span class="material-symbols-outlined">trending_up</span>
         </div>
       </div>
     </div>
 
-    <div class="col-lg-5">
-      <div class="panel p-3 p-md-4 h-100">
-        <div class="section-title mb-3"><i class="bi bi-boxes me-2"></i>현재 재고 / 보유 현황</div>
-        <div style="max-height: 70vh; overflow-y: auto;">
-          <table class="table table-hover align-middle mb-0">
-            <thead>
-              <tr class="text-secondary small">
-                <th>아이템</th><th class="text-end">재고</th><th>보유 중</th>
-              </tr>
-            </thead>
-            <tbody id="inventoryBody">
-              <tr><td colspan="3" class="text-center text-secondary py-4">불러오는 중...</td></tr>
-            </tbody>
-          </table>
-        </div>
+    <div class="panel p-3 p-md-4" id="section-logs">
+      <div class="section-title mb-3"><span class="material-symbols-outlined">history</span>최근 입출고 로그</div>
+      <div style="max-height: 65vh; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-secondary small">
+              <th>시간</th><th>플레이어</th><th>아이템</th><th>동작</th><th class="text-end">수량</th><th>상자</th>
+            </tr>
+          </thead>
+          <tbody id="eventsBody">
+            <tr><td colspan="6" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel p-3 p-md-4" id="section-inventory" style="display:none;">
+      <div class="section-title mb-3"><span class="material-symbols-outlined">inventory_2</span>현재 재고 / 보유 현황</div>
+      <div style="max-height: 65vh; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-secondary small">
+              <th>아이템</th><th class="text-end">재고</th><th>보유 중</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody">
+            <tr><td colspan="3" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
