@@ -18,6 +18,22 @@ logger = logging.getLogger(__name__)
 DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 
 
+def _run_migrations():
+    """db.create_all()은 없는 테이블만 만들고 기존 테이블에 컬럼을 추가해주진 않아서,
+    새 컬럼이 생길 때마다 여기 idempotent하게 추가해준다 (SQLite/Postgres 둘 다 동작)."""
+    inspector = db.inspect(db.engine)
+    if "members" not in inspector.get_table_names():
+        return
+    columns = {c["name"] for c in inspector.get_columns("members")}
+    if "is_developer" not in columns:
+        with db.engine.connect() as conn:
+            conn.execute(db.text(
+                "ALTER TABLE members ADD COLUMN is_developer BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            conn.commit()
+        logger.info("migration: members.is_developer 컬럼 추가함")
+
+
 def create_app():
     logging.basicConfig(level=logging.INFO)
 
@@ -31,6 +47,7 @@ def create_app():
     db.init_app(app)
     with app.app_context():
         db.create_all()
+        _run_migrations()
 
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
