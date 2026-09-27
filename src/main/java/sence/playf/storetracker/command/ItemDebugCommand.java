@@ -31,7 +31,7 @@ public final class ItemDebugCommand {
             return 0;
         }
 
-        ItemStack held = client.player.getInventory().getMainHandStack();
+        ItemStack held = client.player.getMainHandStack();
         if (held.isEmpty()) {
             source.sendError(Text.literal("손에 아이템을 들고 실행하세요."));
             return 0;
