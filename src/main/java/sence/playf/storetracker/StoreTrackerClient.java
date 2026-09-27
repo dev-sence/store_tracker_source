@@ -11,6 +11,7 @@ import sence.playf.storetracker.command.ChestAddCommand;
 import sence.playf.storetracker.command.DevToggleCommand;
 import sence.playf.storetracker.command.ItemDebugCommand;
 import sence.playf.storetracker.command.ItemResetCommand;
+import sence.playf.storetracker.command.VersionCommand;
 import sence.playf.storetracker.config.ModConfig;
 import sence.playf.storetracker.display.PublicItemDisplay;
 import sence.playf.storetracker.registry.ChestRegistry;
@@ -31,6 +32,7 @@ public class StoreTrackerClient implements ClientModInitializer {
 
         ContainerTracker.register();
         PublicItemDisplay.register();
+        VersionCommand.register();
 
         if (BuildInfo.isDevBuild()) {
             ChestAddCommand.register();
