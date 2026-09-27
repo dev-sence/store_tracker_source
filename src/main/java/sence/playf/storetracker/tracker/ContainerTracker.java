@@ -118,11 +118,20 @@ public final class ContainerTracker {
                     dimension, pos.getX(), pos.getY(), pos.getZ());
             String chestLabel = registered.map(ChestRegistry.RegisteredChest::label).orElse(null);
 
+            // 큰 상자(더블 상자)는 블록이 2칸이라 어느 쪽을 클릭했느냐에 따라 실제 좌표가 달라지는데,
+            // 서버 쪽 "이 상자의 재고"는 좌표를 키로 쓰기 때문에 그대로 보내면 같은 상자인데도
+            // 양쪽 좌표에 재고가 각각 따로 쌓여서 합계가 부풀어 보이는 문제가 있었다. 그래서 등록된
+            // 상자라면 항상 등록 당시의 좌표(정본)로 통일해서 보낸다 - 어느 쪽을 열든 좌표는 하나로 고정.
+            String chestDimension = registered.map(ChestRegistry.RegisteredChest::dimension).orElse(dimension);
+            BlockPos chestPos = registered
+                    .map(c -> new BlockPos(c.x(), c.y(), c.z()))
+                    .orElse(pos);
+
             activeHandler = handler;
             activeSlotCount = slotCount;
             activeChest = registered.orElse(null);
-            activeDimension = dimension;
-            activePos = pos;
+            activeDimension = chestDimension;
+            activePos = chestPos;
 
             long session = ++sessionCounter;
 
@@ -136,7 +145,7 @@ public final class ContainerTracker {
                 }
                 Map<String, Integer> counts = ContainerSlots.snapshotCounts(handler, slotCount);
                 Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
-                sendChestLog("OPEN", chestLabel, dimension, pos, counts, names);
+                sendChestLog("OPEN", chestLabel, chestDimension, chestPos, counts, names);
             });
 
             registered.ifPresent(chest -> {
@@ -151,14 +160,14 @@ public final class ContainerTracker {
                 if (BuildInfo.isDevBuild()) {
                     ButtonWidget saveButton = ButtonWidget.builder(
                                     Text.literal("현재 아이템 캡처"),
-                                    button -> SaveItemsAction.run(client, handler, slotCount, dimension, pos))
+                                    button -> SaveItemsAction.run(client, handler, slotCount, chestDimension, chestPos))
                             .dimensions(screen.width - 108, 4, 100, 20)
                             .build();
                     ScreenButtons.add(screen, saveButton);
 
                     ButtonWidget strictButton = ButtonWidget.builder(
                                     Text.literal(chest.strictMode() ? "개인템 차단: ON" : "개인템 차단: OFF"),
-                                    button -> ToggleStrictAction.run(client, dimension, pos))
+                                    button -> ToggleStrictAction.run(client, chestDimension, chestPos))
                             .dimensions(screen.width - 108, 26, 100, 20)
                             .build();
                     ScreenButtons.add(screen, strictButton);
@@ -172,7 +181,7 @@ public final class ContainerTracker {
                 activeDimension = null;
                 activePos = null;
                 pendingClickBefore = null;
-                onContainerClosed(handler, slotCount, chestLabel, dimension, pos);
+                onContainerClosed(handler, slotCount, chestLabel, chestDimension, chestPos);
             });
         });
     }
