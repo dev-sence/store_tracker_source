@@ -69,6 +69,50 @@ def _parse_xyz(data):
         return None
 
 
+def _resync_inventory_from_snapshot(map_key, position, items):
+    """상자를 열거나 닫을 때 실제로 관찰한 내용물로 재고를 그대로 덮어쓴다. 개별 이벤트 기반
+    증감(delta)만으로는 놓치거나 중복된 이벤트가 있을 때 재고가 실제와 어긋날 수 있는데,
+    상자를 볼 때마다 이렇게 실측치로 다시 맞춰주면 "재고"가 항상 실시간 실제 수량에 수렴한다."""
+    dimension = position.get("dimension")
+    x, y, z = position.get("x"), position.get("y"), position.get("z")
+    if not map_key or not dimension or x is None or y is None or z is None:
+        return
+
+    observed = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("item_id")
+        if not item_id:
+            continue
+        try:
+            count = int(item.get("count", 0))
+        except (TypeError, ValueError):
+            continue
+        observed[item_id] = (item.get("item_name", item_id), count)
+
+    existing = {
+        row.item_id: row for row in ChestInventoryItem.query.filter_by(
+            map_key=map_key, dimension=dimension, x=x, y=y, z=z,
+        ).all()
+    }
+
+    for item_id, (display_name, count) in observed.items():
+        row = existing.get(item_id)
+        if row is None:
+            db.session.add(ChestInventoryItem(
+                map_key=map_key, dimension=dimension, x=x, y=y, z=z,
+                item_id=item_id, display_name=display_name, count=count,
+            ))
+        else:
+            row.count = count
+            row.display_name = display_name
+
+    for item_id, row in existing.items():
+        if item_id not in observed:
+            db.session.delete(row)
+
+
 def _adjust_inventory(map_key, position, item_id, display_name, delta):
     """등록된 상자(위치가 있는)의 실시간 재고를 delta만큼 증감시킨다. 없으면 새로 만든다."""
     if not map_key or not position.get("dimension"):
@@ -324,9 +368,16 @@ def chest_log():
     else:
         lines = "(비어 있음)"
 
+    chest_label = data.get("chest_label")
+    if chest_label:
+        # 등록된 공용템 상자일 때만 "재고" 개념이 있다 (경유 상자는 애초에 추적 대상 아님).
+        _resync_inventory_from_snapshot(data["map_key"], position, items)
+        db.session.commit()
+        _refresh_dashboard(data["map_key"])
+
     _dev_log(
         "chest-log", username,
-        f"상자 {label}: {data.get('chest_label') or '경유 상자'} @ {position.get('dimension')}"
+        f"상자 {label}: {chest_label or '경유 상자'} @ {position.get('dimension')}"
         f" ({position.get('x')},{position.get('y')},{position.get('z')})\n{lines}",
         data,
     )
