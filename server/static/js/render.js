@@ -234,6 +234,33 @@ const StoreTrackerRender = {
     });
   },
 
+  publicItems(list, onRemove) {
+    const container = document.getElementById('publicItemList');
+    if (!container) return;
+    const escape = this.escapeHtml;
+
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">등록된 공용템이 없습니다.</div>';
+      return;
+    }
+
+    container.innerHTML = list.map((item) => `
+      <div class="d-flex align-items-center justify-content-between panel p-2 px-3">
+        <div>
+          <span>${escape(item.display_name)}</span>
+          <div class="text-secondary small">${escape(item.item_id)}</div>
+        </div>
+        <button class="btn btn-sm btn-outline-danger py-0 px-2 public-item-remove-btn" data-item-id="${escape(item.item_id)}">
+          <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">delete</span>
+        </button>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.public-item-remove-btn').forEach((btn) => {
+      btn.addEventListener('click', () => onRemove(btn.dataset.itemId));
+    });
+  },
+
   _requestLogList(containerId, list, emptyText) {
     const container = document.getElementById(containerId);
     if (!container) return;

@@ -401,6 +401,56 @@ def admin_toggle_chest_strict():
     return jsonify({"strict_mode": chest.strict_mode, "label": chest.label})
 
 
+@dashboard_bp.get("/api/admin/public-items")
+@developer_required
+def admin_list_public_items():
+    map_key = request.args.get("map", "")
+    if not map_key:
+        return jsonify({"error": "map is required"}), 400
+    items = PublicItemType.query.filter_by(map_key=map_key).order_by(PublicItemType.display_name).all()
+    return jsonify([i.to_dict() for i in items])
+
+
+@dashboard_bp.post("/api/admin/public-items")
+@developer_required
+def admin_add_public_item():
+    """인게임 "현재 아이템 캡처"(전체 재캡처)와 달리, 기존 목록은 그대로 두고 한 종류만 추가한다 -
+    아직 상자에 한 번도 안 들어와 본 새 아이템을 미리 공용템으로 등록해두고 싶을 때 쓴다."""
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    item_id = (data.get("item_id") or "").strip()
+    display_name = (data.get("display_name") or "").strip() or item_id
+    if not map_key or not item_id:
+        return jsonify({"error": "map_key, item_id가 필요합니다"}), 400
+
+    existing = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
+    if existing is not None:
+        return jsonify({"error": "이미 등록된 아이템입니다"}), 409
+
+    item = PublicItemType(map_key=map_key, item_id=item_id, display_name=display_name)
+    db.session.add(item)
+    db.session.commit()
+    return jsonify(item.to_dict()), 201
+
+
+@dashboard_bp.post("/api/admin/public-items/remove")
+@developer_required
+def admin_remove_public_item():
+    """공용템 목록에서 한 종류만 뺀다. item_id에 '#'/':' 같은 문자가 섞여 있어서 URL 경로 대신
+    바디로 받는다 (재고/보유 장부는 그대로 - 캡처 목록에서만 빠지고 기존 데이터는 안 건드림)."""
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    item_id = data.get("item_id")
+    if not map_key or not item_id:
+        return jsonify({"error": "map_key, item_id가 필요합니다"}), 400
+
+    deleted = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).delete()
+    db.session.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"status": "ok", "item_id": item_id})
+
+
 @dashboard_bp.get("/api/admin/request-logs/by-event/<int:event_id>")
 @developer_required
 def admin_request_log_for_event(event_id):

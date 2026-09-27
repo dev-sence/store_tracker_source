@@ -137,6 +137,41 @@ const StoreTrackerApi = {
     return data;
   },
 
+  async fetchPublicItems(mapKey) {
+    const res = await fetch(`/api/admin/public-items?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async addPublicItem(mapKey, itemId, displayName) {
+    const res = await fetch('/api/admin/public-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map_key: mapKey, item_id: itemId, display_name: displayName }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async removePublicItem(mapKey, itemId) {
+    const res = await fetch('/api/admin/public-items/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map_key: mapKey, item_id: itemId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
   async fetchLoginLogs() {
     const res = await fetch('/api/admin/login-logs');
     const data = await res.json().catch(() => ({}));

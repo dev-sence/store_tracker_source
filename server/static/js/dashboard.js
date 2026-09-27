@@ -308,6 +308,76 @@
     }
   }
 
+  async function handleAddPublicItem() {
+    const { value: form } = await Swal.fire({
+      title: '공용템 등록',
+      html: `
+        <input id="swalItemId" class="swal2-input" placeholder="아이템 ID (예: minecraft:andesite)">
+        <input id="swalDisplayName" class="swal2-input" placeholder="표시 이름 (비우면 ID 그대로)">
+      `,
+      showCancelButton: true,
+      confirmButtonText: '등록',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+      preConfirm: () => {
+        const itemId = document.getElementById('swalItemId').value.trim();
+        if (!itemId) {
+          Swal.showValidationMessage('아이템 ID를 입력해주세요.');
+          return false;
+        }
+        return { itemId, displayName: document.getElementById('swalDisplayName').value.trim() };
+      },
+    });
+
+    if (!form) return;
+
+    try {
+      await StoreTrackerApi.addPublicItem(currentMap, form.itemId, form.displayName);
+      StoreTrackerRender.toast('success', '공용템이 등록됐습니다');
+      loadPublicItems();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '등록 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function handleRemovePublicItem(itemId) {
+    const result = await Swal.fire({
+      title: '공용템 목록에서 뺄까요?',
+      text: '재고/보유 데이터는 그대로 남고, 캡처 목록에서만 빠집니다.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '빼기',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await StoreTrackerApi.removePublicItem(currentMap, itemId);
+      StoreTrackerRender.toast('success', '공용템 목록에서 뺐습니다');
+      loadPublicItems();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '처리 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function loadPublicItems() {
+    if (!isDeveloper || !currentMap) return;
+    try {
+      const items = await StoreTrackerApi.fetchPublicItems(currentMap);
+      StoreTrackerRender.publicItems(items, handleRemovePublicItem);
+    } catch (err) {
+      const container = document.getElementById('publicItemList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  function bindAddPublicItemButton() {
+    const btn = document.getElementById('addPublicItemBtn');
+    if (!btn) return;
+    btn.addEventListener('click', handleAddPublicItem);
+  }
+
   async function loadLoginLogs() {
     if (!isDeveloper) return;
     try {
@@ -393,12 +463,14 @@
   bindDetailedLogToggle();
   bindEventRowClicks();
   bindAddMemberButton();
+  bindAddPublicItemButton();
   bindManualTransferButtons();
   bindLogout();
   refresh(false);
   loadFeatureToggles();
   loadChestStrict();
   loadMembers();
+  loadPublicItems();
   loadChestLogs();
   loadLoginLogs();
   loadApplications();

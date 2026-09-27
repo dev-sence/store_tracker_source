@@ -141,6 +141,19 @@
         <div class="text-secondary small">불러오는 중...</div>
       </div>
 
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+        <div class="section-title mb-0"><span class="material-symbols-outlined">sell</span>공용템 등록/해제</div>
+        <button class="btn btn-sm btn-outline-light" id="addPublicItemBtn">
+          <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">add</span> 등록
+        </button>
+      </div>
+      <div class="text-secondary small mb-3">인게임 "현재 아이템 캡처"(전체 재캡처)와 달리 한 종류만 등록/해제합니다. 아직 상자에 한 번도 안 들어온 새 아이템도 미리 등록해둘 수 있습니다.</div>
+      <div style="max-height: 40vh; overflow-y: auto;">
+        <div class="d-flex flex-column gap-2" id="publicItemList">
+          <div class="text-secondary small">불러오는 중...</div>
+        </div>
+      </div>
+
       <div class="section-title mt-4 mb-3"><span class="material-symbols-outlined">history_toggle_off</span>상자 열림/닫힘 로그</div>
       <div class="text-secondary small mb-3">상자를 열고 닫을 때마다의 전체 내용물 스냅샷 - 입출고 로그와 별개로, 클릭하면 상세 통신 로그를 볼 수 있습니다.</div>
       <div style="max-height: 40vh; overflow-y: auto;">
