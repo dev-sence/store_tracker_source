@@ -315,6 +315,34 @@ def admin_toggle_feature():
     return jsonify(toggle.to_dict())
 
 
+@dashboard_bp.get("/api/admin/chest-strict")
+@admin_required
+def admin_get_chest_strict():
+    """등록된 상자의 "개인템 차단"(strict_mode) 상태 - 인게임 개발자 빌드의 상자 안 버튼과 같은 값이다."""
+    map_key = request.args.get("map", "")
+    if not map_key:
+        return jsonify({"error": "map is required"}), 400
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "no registered chest for this map"}), 404
+    return jsonify({"strict_mode": chest.strict_mode, "label": chest.label})
+
+
+@dashboard_bp.post("/api/admin/chest-strict")
+@admin_required
+def admin_toggle_chest_strict():
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    if not map_key:
+        return jsonify({"error": "map_key is required"}), 400
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "no registered chest for this map"}), 404
+    chest.strict_mode = not chest.strict_mode
+    db.session.commit()
+    return jsonify({"strict_mode": chest.strict_mode, "label": chest.label})
+
+
 @dashboard_bp.get("/api/admin/request-logs/by-event/<int:event_id>")
 @admin_required
 def admin_request_log_for_event(event_id):

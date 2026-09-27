@@ -179,6 +179,28 @@
     }
   }
 
+  async function handleChestStrictClick() {
+    try {
+      const updated = await StoreTrackerApi.toggleChestStrict(currentMap);
+      StoreTrackerRender.chestStrictToggle(updated, handleChestStrictClick);
+      StoreTrackerRender.toast('success', '적용됨');
+    } catch (err) {
+      StoreTrackerRender.toast('error', '전환 실패');
+      loadChestStrict();
+    }
+  }
+
+  async function loadChestStrict() {
+    if (!isAdmin || !currentMap) return;
+    try {
+      const data = await StoreTrackerApi.fetchChestStrict(currentMap);
+      StoreTrackerRender.chestStrictToggle(data, handleChestStrictClick);
+    } catch (err) {
+      const container = document.getElementById('chestStrictContainer');
+      if (container) container.innerHTML = '<div class="text-danger small">등록된 상자가 없습니다</div>';
+    }
+  }
+
   function bindLogout() {
     document.getElementById('logoutLink').addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -207,5 +229,6 @@
   bindLogout();
   refresh(false);
   loadFeatureToggles();
+  loadChestStrict();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();

@@ -122,6 +122,21 @@ const StoreTrackerRender = {
     });
   },
 
+  chestStrictToggle(data, onToggle) {
+    const container = document.getElementById('chestStrictContainer');
+    if (!container) return;
+    // strict_mode=true면 공용템 외 아이템을 못 넣는다 - 스위치는 사용자가 물어본 그대로
+    // "넣을 수 있음"을 의미하게 뒤집어서 보여준다 (헷갈리지 않게).
+    const allowOthers = !data.strict_mode;
+    container.innerHTML = `<div class="d-flex align-items-center justify-content-between panel p-2 px-3">
+      <span class="small">공용템 외 아이템 넣기 ${this.escapeHtml(data.label ? `(${data.label})` : '')}</span>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="chestStrictSwitch" ${allowOthers ? 'checked' : ''}>
+      </div>
+    </div>`;
+    document.getElementById('chestStrictSwitch').addEventListener('change', onToggle);
+  },
+
   requestLogDetail(log) {
     const escape = this.escapeHtml;
     let payloadPretty = '(없음)';
