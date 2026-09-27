@@ -1,14 +1,15 @@
 (function () {
   const REFRESH_INTERVAL_MS = 15000;
   const currentMap = document.body.dataset.map || '';
-  const isAdmin = document.body.dataset.isAdmin === 'true';
+  const isDeveloper = document.body.dataset.isDeveloper === 'true';
+  const isSuperAdmin = document.body.dataset.isSuperAdmin === 'true';
 
   async function refresh(manual) {
     try {
       const data = await StoreTrackerApi.fetchDashboardData(currentMap);
       StoreTrackerRender.stats(data);
-      StoreTrackerRender.events(data.events, isAdmin);
-      StoreTrackerRender.inventory(data.inventory, isAdmin, handleInventoryEdit);
+      StoreTrackerRender.events(data.events, isDeveloper);
+      StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit);
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }
@@ -169,7 +170,7 @@
   }
 
   async function loadFeatureToggles() {
-    if (!isAdmin || !currentMap) return;
+    if (!isDeveloper || !currentMap) return;
     try {
       const toggles = await StoreTrackerApi.fetchFeatureToggles(currentMap);
       StoreTrackerRender.featureToggles(toggles, handleToggleClick);
@@ -191,7 +192,7 @@
   }
 
   async function loadChestStrict() {
-    if (!isAdmin || !currentMap) return;
+    if (!isDeveloper || !currentMap) return;
     try {
       const data = await StoreTrackerApi.fetchChestStrict(currentMap);
       StoreTrackerRender.chestStrictToggle(data, handleChestStrictClick);
@@ -245,12 +246,34 @@
   }
 
   async function loadMembers() {
-    if (!isAdmin) return;
+    if (!isDeveloper) return;
     try {
       const members = await StoreTrackerApi.fetchMembers();
-      StoreTrackerRender.members(members, document.body.dataset.username, handleDeleteMember);
+      StoreTrackerRender.members(
+        members, document.body.dataset.username, isSuperAdmin, handleDeleteMember,
+        async (memberId) => {
+          try {
+            await StoreTrackerApi.toggleMemberDeveloper(memberId);
+            StoreTrackerRender.toast('success', '적용됨');
+          } catch (err) {
+            StoreTrackerRender.toast('error', '전환 실패');
+          }
+          loadMembers();
+        },
+      );
     } catch (err) {
       const container = document.getElementById('memberList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  async function loadChestLogs() {
+    if (!isDeveloper || !currentMap) return;
+    try {
+      const logs = await StoreTrackerApi.fetchChestLogs(currentMap);
+      StoreTrackerRender.chestLogs(logs);
+    } catch (err) {
+      const container = document.getElementById('chestLogList');
       if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
     }
   }
@@ -292,5 +315,6 @@
   loadFeatureToggles();
   loadChestStrict();
   loadMembers();
+  loadChestLogs();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();

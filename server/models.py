@@ -19,6 +19,9 @@ class Member(db.Model):
     added_by = db.Column(db.String(64), nullable=True)
     # 웹 대시보드를 디스코드 로그인으로 여는 사람과 이 멤버를 연결해둔다 (아직 아무도 로그인 안 했으면 None).
     discord_id = db.Column(db.String(32), nullable=True, index=True)
+    # 개발자 탭(기능 토글/상세 로그/멤버·재고 관리)에 접근 가능한지 여부. sence1012(최고관리자)는
+    # 이 값과 무관하게 항상 개발자로 취급되고, 이 값을 바꿀 수 있는 것도 sence1012뿐이다.
+    is_developer = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self):
         return {
@@ -28,6 +31,7 @@ class Member(db.Model):
             "added_at": self.added_at.isoformat(),
             "added_by": self.added_by,
             "discord_id": self.discord_id,
+            "is_developer": self.is_developer,
         }
 
 

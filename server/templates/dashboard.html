@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Sence StoreTracker{% endblock %}
-{% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}" data-is-admin="{{ 'true' if is_admin else 'false' }}"{% endblock %}
+{% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-is-super-admin="{{ 'true' if is_super_admin else 'false' }}"{% endblock %}
 {% block theme_toggle %}{% endblock %}
 {% block body %}
 <nav class="navbar">
@@ -43,10 +43,10 @@
           <span class="material-symbols-outlined">inventory_2</span>
           <span>재고 현황</span>
         </div>
-        {% if is_admin %}
+        {% if is_developer %}
         <div class="nav-item" data-section="admin">
-          <span class="material-symbols-outlined">admin_panel_settings</span>
-          <span>관리자</span>
+          <span class="material-symbols-outlined">terminal</span>
+          <span>개발자</span>
         </div>
         {% endif %}
       </div>
@@ -100,7 +100,7 @@
     <div class="panel p-3 p-md-4" id="section-logs">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="section-title"><span class="material-symbols-outlined">history</span>최근 입출고 로그</div>
-        {% if is_admin %}
+        {% if is_developer %}
         <label class="text-secondary small d-flex align-items-center gap-1" style="cursor:pointer;">
           <input type="checkbox" id="detailedLogToggle"> 상세 보기
         </label>
@@ -123,9 +123,9 @@
       </div>
     </div>
 
-    {% if is_admin %}
+    {% if is_developer %}
     <div class="panel p-3 p-md-4 mt-4" id="section-admin" style="display:none;">
-      <div class="section-title mb-3"><span class="material-symbols-outlined">admin_panel_settings</span>기능 토글</div>
+      <div class="section-title mb-3"><span class="material-symbols-outlined">toggle_on</span>기능 토글</div>
       <div class="text-secondary small mb-3">인게임 /dev_toggle과 동일하게 이 맵의 모든 유저에게 바로 적용됩니다.</div>
       <div class="d-flex flex-column gap-2" id="featureToggleList">
         <div class="text-secondary small">불러오는 중...</div>
@@ -137,12 +137,23 @@
         <div class="text-secondary small">불러오는 중...</div>
       </div>
 
+      <div class="section-title mt-4 mb-3"><span class="material-symbols-outlined">history_toggle_off</span>상자 열림/닫힘 로그</div>
+      <div class="text-secondary small mb-3">상자를 열고 닫을 때마다의 전체 내용물 스냅샷 - 입출고 로그와 별개로, 클릭하면 상세 통신 로그를 볼 수 있습니다.</div>
+      <div style="max-height: 40vh; overflow-y: auto;">
+        <div class="d-flex flex-column gap-2" id="chestLogList">
+          <div class="text-secondary small">불러오는 중...</div>
+        </div>
+      </div>
+
       <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
         <div class="section-title mb-0"><span class="material-symbols-outlined">group</span>멤버 관리</div>
         <button class="btn btn-sm btn-outline-light" id="addMemberBtn">
           <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">person_add</span> 추가
         </button>
       </div>
+      {% if is_super_admin %}
+      <div class="text-secondary small mb-2">이름 옆 스위치로 개발자 탭 접근 권한을 지정/해제할 수 있습니다.</div>
+      {% endif %}
       <div class="d-flex flex-column gap-2" id="memberList">
         <div class="text-secondary small">불러오는 중...</div>
       </div>

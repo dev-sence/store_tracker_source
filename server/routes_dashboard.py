@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
-# 대시보드에서 로그 상세보기/기능 토글처럼 민감한 걸 만질 수 있는 사람 (마크 닉네임 기준, 소문자 비교).
-ADMIN_USERNAMES = {"sence1012"}
+# 최고관리자 - 이 계정만 다른 멤버를 개발자로 지정/해제할 수 있다 (마크 닉네임 기준, 소문자 비교).
+SUPER_ADMIN_USERNAME = "sence1012"
 TOGGLE_KEYS = ("label_overlay", "public_tag", "passthrough_tracking", "chest_log")
 
 
@@ -33,15 +34,30 @@ def _current_member():
     return Member.query.filter_by(discord_id=discord_id).first()
 
 
-def _is_admin(member) -> bool:
-    return member is not None and member.minecraft_username.lower() in ADMIN_USERNAMES
+def _is_super_admin(member) -> bool:
+    return member is not None and member.minecraft_username.lower() == SUPER_ADMIN_USERNAME
 
 
-def admin_required(fn):
+def _is_developer(member) -> bool:
+    return member is not None and (_is_super_admin(member) or member.is_developer)
+
+
+def developer_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         member = _current_member()
-        if not _is_admin(member):
+        if not _is_developer(member):
+            return jsonify({"error": "unauthorized"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def super_admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        member = _current_member()
+        if not _is_super_admin(member):
             return jsonify({"error": "unauthorized"}), 403
         return fn(*args, **kwargs)
 
@@ -189,7 +205,8 @@ def index():
         profile_name=member.minecraft_username,
         discord_username=session.get("discord_username"),
         discord_avatar=session.get("discord_avatar"),
-        is_admin=_is_admin(member),
+        is_developer=_is_developer(member),
+        is_super_admin=_is_super_admin(member),
     )
 
 
@@ -280,7 +297,7 @@ def dashboard_data():
 
 
 @dashboard_bp.get("/api/admin/feature-toggles")
-@admin_required
+@developer_required
 def admin_get_feature_toggles():
     map_key = request.args.get("map", "")
     if not map_key:
@@ -292,7 +309,7 @@ def admin_get_feature_toggles():
 
 
 @dashboard_bp.post("/api/admin/feature-toggles")
-@admin_required
+@developer_required
 def admin_toggle_feature():
     data = request.get_json(silent=True) or {}
     map_key = data.get("map_key")
@@ -316,7 +333,7 @@ def admin_toggle_feature():
 
 
 @dashboard_bp.get("/api/admin/chest-strict")
-@admin_required
+@developer_required
 def admin_get_chest_strict():
     """등록된 상자의 "개인템 차단"(strict_mode) 상태 - 인게임 개발자 빌드의 상자 안 버튼과 같은 값이다."""
     map_key = request.args.get("map", "")
@@ -329,7 +346,7 @@ def admin_get_chest_strict():
 
 
 @dashboard_bp.post("/api/admin/chest-strict")
-@admin_required
+@developer_required
 def admin_toggle_chest_strict():
     data = request.get_json(silent=True) or {}
     map_key = data.get("map_key")
@@ -344,7 +361,7 @@ def admin_toggle_chest_strict():
 
 
 @dashboard_bp.get("/api/admin/request-logs/by-event/<int:event_id>")
-@admin_required
+@developer_required
 def admin_request_log_for_event(event_id):
     """이 입출고 로그(Event)를 만든 실제 통신 한 건의 상세 내역 - 디스코드 개발자 로그 채널에
     찍히던 것과 같은 정보(엔드포인트/닉네임/아이피/결과/원본 요청)를 웹에서도 볼 수 있게 한다."""
@@ -354,15 +371,54 @@ def admin_request_log_for_event(event_id):
     return jsonify(log.to_dict())
 
 
+@dashboard_bp.get("/api/admin/chest-logs")
+@developer_required
+def admin_chest_logs():
+    """상자를 열고 닫을 때마다 남는 전체 내용물 스냅샷 로그 (감사/디버깅용, 입출고 로그와는 별개)."""
+    map_key = request.args.get("map", "")
+    limit = min(int(request.args.get("limit", 100)), 300)
+    rows = RequestLog.query.filter_by(endpoint="chest-log").order_by(RequestLog.id.desc()).limit(limit * 2).all()
+
+    result = []
+    for row in rows:
+        if map_key and row.payload:
+            try:
+                payload = json.loads(row.payload)
+            except (TypeError, ValueError):
+                payload = {}
+            if payload.get("map_key") and payload["map_key"] != map_key:
+                continue
+        result.append(row.to_dict())
+        if len(result) >= limit:
+            break
+
+    return jsonify(result)
+
+
+@dashboard_bp.post("/api/admin/members/<int:member_id>/developer")
+@super_admin_required
+def admin_toggle_member_developer(member_id):
+    """개발자 지정/해제 - 최고관리자(sence1012)만 다른 멤버를 개발자 탭에 들어올 수 있게 할 수 있다."""
+    member = Member.query.get(member_id)
+    if member is None:
+        return jsonify({"error": "not found"}), 404
+    if member.minecraft_username.lower() == SUPER_ADMIN_USERNAME:
+        return jsonify({"error": "최고관리자는 대상이 될 수 없습니다"}), 400
+
+    member.is_developer = not member.is_developer
+    db.session.commit()
+    return jsonify(member.to_dict())
+
+
 @dashboard_bp.get("/api/admin/members")
-@admin_required
+@developer_required
 def admin_list_members():
     members = Member.query.order_by(Member.added_at.desc()).all()
     return jsonify([m.to_dict() for m in members])
 
 
 @dashboard_bp.post("/api/admin/members")
-@admin_required
+@developer_required
 def admin_add_member():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
@@ -382,7 +438,7 @@ def admin_add_member():
 
 
 @dashboard_bp.delete("/api/admin/members/<int:member_id>")
-@admin_required
+@developer_required
 def admin_remove_member(member_id):
     member = Member.query.get(member_id)
     if member is None:
@@ -396,7 +452,7 @@ def admin_remove_member(member_id):
 
 
 @dashboard_bp.post("/api/admin/inventory/adjust")
-@admin_required
+@developer_required
 def admin_adjust_inventory():
     """재고 수동 수정 - 실측치 동기화가 아직 못 따라잡았거나 뭔가 어긋났을 때 관리자가 직접 바로잡는다."""
     data = request.get_json(silent=True) or {}

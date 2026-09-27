@@ -106,6 +106,24 @@ const StoreTrackerApi = {
     }
   },
 
+  async toggleMemberDeveloper(memberId) {
+    const res = await fetch(`/api/admin/members/${memberId}/developer`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async fetchChestLogs(mapKey) {
+    const res = await fetch(`/api/admin/chest-logs?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
   async adjustInventory(mapKey, itemId, count) {
     const res = await fetch('/api/admin/inventory/adjust', {
       method: 'POST',

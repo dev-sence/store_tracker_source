@@ -28,7 +28,7 @@ const StoreTrackerRender = {
     document.getElementById('statToday').textContent = data.stats.today_events;
   },
 
-  events(list, isAdmin) {
+  events(list, isDeveloper) {
     const body = document.getElementById('eventsBody');
     if (!list.length) {
       body.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">아직 기록된 이벤트가 없습니다.</td></tr>';
@@ -45,7 +45,7 @@ const StoreTrackerRender = {
       const avatar = `https://mc-heads.net/avatar/${encodeURIComponent(e.minecraft_username)}/32`;
 
       const position = e.dimension ? `${e.dimension} (${e.pos_x}, ${e.pos_y}, ${e.pos_z})` : '-';
-      const rowAttrs = isAdmin ? `class="event-row" data-event-id="${e.id}" style="cursor:pointer;"` : '';
+      const rowAttrs = isDeveloper ? `class="event-row" data-event-id="${e.id}" style="cursor:pointer;"` : '';
 
       return `<tr ${rowAttrs}>
         <td class="text-secondary small">${formatTime(e.received_at)}</td>
@@ -64,7 +64,7 @@ const StoreTrackerRender = {
     }).join('');
   },
 
-  inventory(items, isAdmin, onEdit) {
+  inventory(items, isDeveloper, onEdit) {
     const body = document.getElementById('inventoryBody');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">등록된 공용템이 없습니다.</td></tr>';
@@ -77,7 +77,7 @@ const StoreTrackerRender = {
       const holders = item.holders.length
         ? item.holders.map((h) => `${escape(h.username)} <span class="text-secondary">x${h.count}</span>`).join(', ')
         : '<span class="text-secondary">없음</span>';
-      const editBtn = isAdmin
+      const editBtn = isDeveloper
         ? `<button class="btn btn-sm btn-outline-light py-0 px-1 ms-2 inventory-edit-btn"
              data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
              data-current="${item.stock}" title="재고 수동 수정">
@@ -92,7 +92,7 @@ const StoreTrackerRender = {
       </tr>`;
     }).join('');
 
-    if (isAdmin) {
+    if (isDeveloper) {
       body.querySelectorAll('.inventory-edit-btn').forEach((btn) => {
         btn.addEventListener('click', () => onEdit(btn.dataset.itemId, btn.dataset.itemName, Number(btn.dataset.current)));
       });
@@ -137,7 +137,7 @@ const StoreTrackerRender = {
     document.getElementById('chestStrictSwitch').addEventListener('change', onToggle);
   },
 
-  members(list, currentUsername, onDelete) {
+  members(list, currentUsername, isSuperAdmin, onDelete, onToggleDeveloper) {
     const container = document.getElementById('memberList');
     const escape = this.escapeHtml;
     if (!list.length) {
@@ -149,7 +149,22 @@ const StoreTrackerRender = {
       const linked = m.discord_id
         ? '<span class="badge bg-success">연동됨</span>'
         : '<span class="badge bg-secondary">미연동</span>';
+      const isSuperAdminRow = m.minecraft_username.toLowerCase() === 'sence1012';
       const isSelf = m.minecraft_username.toLowerCase() === currentUsername.toLowerCase();
+
+      let devControl;
+      if (isSuperAdminRow) {
+        devControl = '<span class="badge" style="background:#d4a700;">최고관리자</span>';
+      } else if (isSuperAdmin) {
+        devControl = `<div class="form-check form-switch mb-0" title="개발자 지정/해제">
+          <input class="form-check-input" type="checkbox" role="switch" data-dev-toggle-id="${m.id}" ${m.is_developer ? 'checked' : ''}>
+        </div>`;
+      } else if (m.is_developer) {
+        devControl = '<span class="badge bg-info text-dark">개발자</span>';
+      } else {
+        devControl = '';
+      }
+
       const deleteBtn = isSelf
         ? ''
         : `<button class="btn btn-sm btn-outline-danger py-0 px-2 member-delete-btn"
@@ -161,6 +176,7 @@ const StoreTrackerRender = {
         <div class="d-flex align-items-center gap-2">
           <span>${escape(m.minecraft_username)}</span>
           ${linked}
+          ${devControl}
         </div>
         ${deleteBtn}
       </div>`;
@@ -168,6 +184,37 @@ const StoreTrackerRender = {
 
     container.querySelectorAll('.member-delete-btn').forEach((btn) => {
       btn.addEventListener('click', () => onDelete(btn.dataset.memberId, btn.dataset.username));
+    });
+    container.querySelectorAll('input[data-dev-toggle-id]').forEach((input) => {
+      input.addEventListener('change', () => onToggleDeveloper(input.dataset.devToggleId));
+    });
+  },
+
+  chestLogs(list) {
+    const container = document.getElementById('chestLogList');
+    if (!container) return;
+    const escape = this.escapeHtml;
+
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">아직 기록된 상자 열림/닫힘 로그가 없습니다.</div>';
+      return;
+    }
+
+    container.innerHTML = list.map((log) => {
+      const firstLine = (log.result || '').split('\n')[0];
+      return `<div class="panel p-2 px-3 chest-log-row" style="cursor:pointer;" data-log='${escape(JSON.stringify(log))}'>
+        <div class="d-flex justify-content-between">
+          <span class="small">${escape(log.minecraft_username || '(알 수 없음)')}</span>
+          <span class="text-secondary small">${this.formatTime(log.created_at)}</span>
+        </div>
+        <div class="text-secondary small">${escape(firstLine)}</div>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.chest-log-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        this.requestLogDetail(JSON.parse(row.dataset.log));
+      });
     });
   },
 
