@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.10.1'
+    id 'fabric-loom' version '1.14.10' // Gradle 9.x 필요 (아래 scripts/build-all-versions.sh는 gradle 9로 실행)
     id 'maven-publish'
 }
 
@@ -126,7 +126,7 @@ java {
 
 jar {
     from("LICENSE") {
-        rename { "${it}_${project.archivesBaseName}" }
+        rename { "${it}_${base.archivesName.get()}" }
     }
 }
 
