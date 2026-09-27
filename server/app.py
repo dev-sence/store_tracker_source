@@ -7,6 +7,7 @@ from config import Config
 from crypto import SecureChannel
 from models import db
 from routes_admin import admin_bp
+from routes_dashboard import dashboard_bp
 from routes_public import public_bp
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ def create_app():
     app.config.from_object(Config)
 
     app.secure_channel = SecureChannel(app.config["APP_SECRET"])
+    # 웹 대시보드 로그인 세션 서명용 - 새 환경변수를 추가하지 않고 기존 APP_SECRET을 재사용한다.
+    app.secret_key = app.config["APP_SECRET"]
 
     db.init_app(app)
     with app.app_context():
@@ -31,6 +34,7 @@ def create_app():
 
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(dashboard_bp)
 
     @app.get("/healthz")
     def healthz():

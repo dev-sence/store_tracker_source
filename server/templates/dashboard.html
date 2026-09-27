@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}대시보드 - Sence StoreTracker{% endblock %}
+{% block body_attrs %}data-map="{{ selected_map }}"{% endblock %}
+{% block body %}
+<nav class="navbar navbar-expand-lg border-bottom" style="border-color: var(--border-soft) !important;">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand"><i class="bi bi-box-seam me-2"></i>Sence StoreTracker</span>
+    <div class="d-flex align-items-center gap-3 ms-auto">
+      <span class="text-secondary small d-none d-md-inline"><span class="live-dot me-1"></span>실시간 (15초마다 갱신)</span>
+      {% if map_keys %}
+      <select class="form-select form-select-sm" id="mapSelect" style="width:auto;">
+        {% for m in map_keys %}
+        <option value="{{ m }}" {% if m == selected_map %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <button class="btn btn-sm btn-outline-light" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i></button>
+      <a href="#" id="logoutLink" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right"></i> 로그아웃</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div><div class="label">등록 멤버</div><div class="value" id="statMembers">-</div></div>
+        <i class="bi bi-people"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div><div class="label">등록 상자</div><div class="value" id="statChests">-</div></div>
+        <i class="bi bi-archive"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div><div class="label">공용템 종류</div><div class="value" id="statItemTypes">-</div></div>
+        <i class="bi bi-tags"></i>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div><div class="label">오늘 이벤트</div><div class="value" id="statToday">-</div></div>
+        <i class="bi bi-graph-up-arrow"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="panel p-3 p-md-4 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="section-title"><i class="bi bi-clock-history me-2"></i>최근 입출고 로그</div>
+        </div>
+        <div style="max-height: 70vh; overflow-y: auto;">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr class="text-secondary small">
+                <th>시간</th><th>플레이어</th><th>아이템</th><th>동작</th><th class="text-end">수량</th><th>상자</th>
+              </tr>
+            </thead>
+            <tbody id="eventsBody">
+              <tr><td colspan="6" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="panel p-3 p-md-4 h-100">
+        <div class="section-title mb-3"><i class="bi bi-boxes me-2"></i>현재 재고 / 보유 현황</div>
+        <div style="max-height: 70vh; overflow-y: auto;">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr class="text-secondary small">
+                <th>아이템</th><th class="text-end">재고</th><th>보유 중</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryBody">
+              <tr><td colspan="3" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/render.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
