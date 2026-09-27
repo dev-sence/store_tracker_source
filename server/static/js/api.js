@@ -44,4 +44,26 @@ const StoreTrackerApi = {
     }
     return data;
   },
+
+  async fetchRequestLogForEvent(eventId) {
+    const res = await fetch(`/api/admin/request-logs/by-event/${eventId}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async adjustInventory(mapKey, itemId, count) {
+    const res = await fetch('/api/admin/inventory/adjust', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map_key: mapKey, item_id: itemId, count }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
 };

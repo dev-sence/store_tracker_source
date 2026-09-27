@@ -8,7 +8,8 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 import discord_backoff
 import discord_oauth
 from models import (
-    ChestInventoryItem, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType, TrackedChest, db,
+    ChestInventoryItem, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType, RequestLog,
+    TrackedChest, db,
 )
 
 logger = logging.getLogger(__name__)
@@ -312,3 +313,49 @@ def admin_toggle_feature():
     setattr(toggle, key, not getattr(toggle, key))
     db.session.commit()
     return jsonify(toggle.to_dict())
+
+
+@dashboard_bp.get("/api/admin/request-logs/by-event/<int:event_id>")
+@admin_required
+def admin_request_log_for_event(event_id):
+    """이 입출고 로그(Event)를 만든 실제 통신 한 건의 상세 내역 - 디스코드 개발자 로그 채널에
+    찍히던 것과 같은 정보(엔드포인트/닉네임/아이피/결과/원본 요청)를 웹에서도 볼 수 있게 한다."""
+    log = RequestLog.query.filter_by(event_id=event_id).order_by(RequestLog.id.desc()).first()
+    if log is None:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(log.to_dict())
+
+
+@dashboard_bp.post("/api/admin/inventory/adjust")
+@admin_required
+def admin_adjust_inventory():
+    """재고 수동 수정 - 실측치 동기화가 아직 못 따라잡았거나 뭔가 어긋났을 때 관리자가 직접 바로잡는다."""
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    item_id = data.get("item_id")
+    try:
+        count = int(data.get("count"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid count"}), 400
+    if not map_key or not item_id or count < 0:
+        return jsonify({"error": "invalid request"}), 400
+
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "no registered chest for this map"}), 404
+
+    row = ChestInventoryItem.query.filter_by(
+        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
+    ).first()
+    if row is None:
+        catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
+        display_name = catalog_entry.display_name if catalog_entry else item_id
+        row = ChestInventoryItem(
+            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
+            item_id=item_id, display_name=display_name, count=count,
+        )
+        db.session.add(row)
+    else:
+        row.count = count
+    db.session.commit()
+    return jsonify({"status": "ok", "item_id": item_id, "count": row.count})

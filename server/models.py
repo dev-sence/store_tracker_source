@@ -175,6 +175,36 @@ class FeatureToggle(db.Model):
         }
 
 
+class RequestLog(db.Model):
+    """모든 API 요청 시도(성공/실패 무관)의 상세 기록 - 예전엔 디스코드 개발자 로그 채널에만
+    남기고 저장은 안 했는데, 웹 대시보드에서 "입출고 로그 클릭 -> 상세 통신 로그" 기능을 만들려면
+    저장된 데이터가 있어야 해서 새로 추가했다."""
+    __tablename__ = "request_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    endpoint = db.Column(db.String(64), nullable=False)
+    minecraft_username = db.Column(db.String(32), nullable=True)
+    ip = db.Column(db.String(64), nullable=True)
+    result = db.Column(db.Text, nullable=False)
+    payload = db.Column(db.Text, nullable=True)  # JSON 문자열
+    # 이 요청이 실제로 Event를 하나 만들어냈으면(log-event 성공), 그 Event와 연결해서
+    # "이 입출고 로그를 만든 통신이 정확히 뭐였는지" 바로 찾아볼 수 있게 한다.
+    event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=True, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "endpoint": self.endpoint,
+            "minecraft_username": self.minecraft_username,
+            "ip": self.ip,
+            "result": self.result,
+            "payload": self.payload,
+            "event_id": self.event_id,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 class DashboardMessage(db.Model):
     """맵별로 재고/보유 현황 디스코드 메시지 1개를 계속 수정(edit)하기 위해 메시지 ID를 기억해둔다."""
     __tablename__ = "dashboard_messages"

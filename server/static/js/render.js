@@ -28,7 +28,7 @@ const StoreTrackerRender = {
     document.getElementById('statToday').textContent = data.stats.today_events;
   },
 
-  events(list) {
+  events(list, isAdmin) {
     const body = document.getElementById('eventsBody');
     if (!list.length) {
       body.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">아직 기록된 이벤트가 없습니다.</td></tr>';
@@ -45,8 +45,9 @@ const StoreTrackerRender = {
       const avatar = `https://mc-heads.net/avatar/${encodeURIComponent(e.minecraft_username)}/32`;
 
       const position = e.dimension ? `${e.dimension} (${e.pos_x}, ${e.pos_y}, ${e.pos_z})` : '-';
+      const rowAttrs = isAdmin ? `class="event-row" data-event-id="${e.id}" style="cursor:pointer;"` : '';
 
-      return `<tr>
+      return `<tr ${rowAttrs}>
         <td class="text-secondary small">${formatTime(e.received_at)}</td>
         <td>
           <img class="avatar-sm me-2" src="${avatar}" onerror="this.style.display='none'">
@@ -63,7 +64,7 @@ const StoreTrackerRender = {
     }).join('');
   },
 
-  inventory(items) {
+  inventory(items, isAdmin, onEdit) {
     const body = document.getElementById('inventoryBody');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">등록된 공용템이 없습니다.</td></tr>';
@@ -76,13 +77,26 @@ const StoreTrackerRender = {
       const holders = item.holders.length
         ? item.holders.map((h) => `${escape(h.username)} <span class="text-secondary">x${h.count}</span>`).join(', ')
         : '<span class="text-secondary">없음</span>';
+      const editBtn = isAdmin
+        ? `<button class="btn btn-sm btn-outline-light py-0 px-1 ms-2 inventory-edit-btn"
+             data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
+             data-current="${item.stock}" title="재고 수동 수정">
+             <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">edit</span>
+           </button>`
+        : '';
 
       return `<tr>
         <td>${escape(item.display_name)}</td>
-        <td class="text-end fw-semibold">${item.stock}</td>
+        <td class="text-end fw-semibold">${item.stock}${editBtn}</td>
         <td class="small">${holders}</td>
       </tr>`;
     }).join('');
+
+    if (isAdmin) {
+      body.querySelectorAll('.inventory-edit-btn').forEach((btn) => {
+        btn.addEventListener('click', () => onEdit(btn.dataset.itemId, btn.dataset.itemName, Number(btn.dataset.current)));
+      });
+    }
   },
 
   featureToggles(toggles, onToggle) {
@@ -105,6 +119,38 @@ const StoreTrackerRender = {
 
     container.querySelectorAll('input[data-toggle-key]').forEach((input) => {
       input.addEventListener('change', () => onToggle(input.dataset.toggleKey));
+    });
+  },
+
+  requestLogDetail(log) {
+    const escape = this.escapeHtml;
+    let payloadPretty = '(없음)';
+    if (log.payload) {
+      try {
+        payloadPretty = JSON.stringify(JSON.parse(log.payload), null, 2);
+      } catch (e) {
+        payloadPretty = log.payload;
+      }
+    }
+
+    const html = `
+      <div class="text-start small">
+        <div class="mb-2"><span class="text-secondary">엔드포인트</span><br><code>${escape(log.endpoint)}</code></div>
+        <div class="mb-2"><span class="text-secondary">닉네임</span><br>${escape(log.minecraft_username || '(알 수 없음)')}</div>
+        <div class="mb-2"><span class="text-secondary">아이피</span><br>${escape(log.ip || '(알 수 없음)')}</div>
+        <div class="mb-2"><span class="text-secondary">시각</span><br>${this.formatTime(log.created_at)}</div>
+        <div class="mb-2"><span class="text-secondary">결과</span><br>${escape(log.result)}</div>
+        <div><span class="text-secondary">요청 내용(복호화됨)</span>
+          <pre class="small p-2 mt-1" style="background:var(--hover-bg); border-radius:8px; max-height:260px; overflow:auto; white-space:pre-wrap; word-break:break-all;">${escape(payloadPretty)}</pre>
+        </div>
+      </div>`;
+
+    Swal.fire({
+      title: '상세 통신 로그',
+      html,
+      width: 560,
+      confirmButtonText: '닫기',
+      ...this.swalTheme(),
     });
   },
 

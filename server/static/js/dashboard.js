@@ -7,8 +7,8 @@
     try {
       const data = await StoreTrackerApi.fetchDashboardData(currentMap);
       StoreTrackerRender.stats(data);
-      StoreTrackerRender.events(data.events);
-      StoreTrackerRender.inventory(data.inventory);
+      StoreTrackerRender.events(data.events, isAdmin);
+      StoreTrackerRender.inventory(data.inventory, isAdmin, handleInventoryEdit);
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }
@@ -17,6 +17,48 @@
         StoreTrackerRender.toast('error', '새로고침 실패');
       }
     }
+  }
+
+  async function handleInventoryEdit(itemId, itemName, current) {
+    const { value: input } = await Swal.fire({
+      title: '재고 수동 수정',
+      html: `<div class="text-start small text-secondary mb-2">${StoreTrackerRender.escapeHtml(itemName)}</div>`,
+      input: 'number',
+      inputValue: current,
+      inputAttributes: { min: 0, step: 1 },
+      showCancelButton: true,
+      confirmButtonText: '저장',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+      inputValidator: (value) => (value === '' || Number(value) < 0 ? '0 이상의 숫자를 입력해주세요.' : undefined),
+    });
+
+    if (input === undefined || Number(input) === current) {
+      return;
+    }
+
+    try {
+      await StoreTrackerApi.adjustInventory(currentMap, itemId, Number(input));
+      StoreTrackerRender.toast('success', '재고가 수정됐습니다');
+      refresh(false);
+    } catch (err) {
+      Swal.fire({
+        icon: 'error', title: '수정 실패', text: err.message, ...StoreTrackerRender.swalTheme(),
+      });
+    }
+  }
+
+  function bindEventRowClicks() {
+    document.getElementById('eventsBody').addEventListener('click', async (ev) => {
+      const row = ev.target.closest('.event-row');
+      if (!row) return;
+      try {
+        const log = await StoreTrackerApi.fetchRequestLogForEvent(row.dataset.eventId);
+        StoreTrackerRender.requestLogDetail(log);
+      } catch (err) {
+        StoreTrackerRender.toast('error', '상세 로그를 찾을 수 없습니다');
+      }
+    });
   }
 
   function bindMapSelect() {
@@ -161,6 +203,7 @@
   bindMobileMenu();
   bindProfileName();
   bindDetailedLogToggle();
+  bindEventRowClicks();
   bindLogout();
   refresh(false);
   loadFeatureToggles();

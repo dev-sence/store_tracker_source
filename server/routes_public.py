@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ from flask import Blueprint, current_app, jsonify, request
 import discord_client
 from models import (
     ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
-    TrackedChest, db,
+    RequestLog, TrackedChest, db,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,13 +46,27 @@ def _client_ip() -> str:
     return request.headers.get("X-Forwarded-For", request.remote_addr) or "(알 수 없음)"
 
 
-def _dev_log(endpoint: str, username, result: str, payload=None):
+def _dev_log(endpoint: str, username, result: str, payload=None, event_id=None):
+    """모든 API 요청 시도(성공/실패 무관)를 디스코드 개발자 로그 채널 + DB(RequestLog) 양쪽에 남긴다.
+    디스코드는 꺼져 있을 수도 있으니(DISCORD_POSTING_ENABLED), 웹 대시보드의 "상세 통신 로그" 기능은
+    DB 쪽만 보고 동작한다."""
+    ip = _client_ip()
+    try:
+        payload_json = json.dumps(payload, ensure_ascii=False, default=str) if payload is not None else None
+    except TypeError:
+        payload_json = str(payload)
+    db.session.add(RequestLog(
+        endpoint=endpoint, minecraft_username=username, ip=ip,
+        result=result, payload=payload_json, event_id=event_id,
+    ))
+    db.session.commit()
+
     discord_client.post_dev_log(
         current_app.config["DISCORD_BOT_TOKEN"],
         current_app.config["DISCORD_DEV_LOG_CHANNEL_ID"],
         endpoint=endpoint,
         username=username,
-        ip=_client_ip(),
+        ip=ip,
         result=result,
         payload=payload,
     )
@@ -323,7 +338,7 @@ def log_event():
     _dev_log("log-event", username,
               f"기록됨 (202): {data['action']} {data['item_name']} x{count}"
               f" @ {event.chest_label or '경유 상자'}({event.pos_x},{event.pos_y},{event.pos_z})",
-              data)
+              data, event_id=event.id)
 
     return jsonify({"status": "accepted"}), 202
 

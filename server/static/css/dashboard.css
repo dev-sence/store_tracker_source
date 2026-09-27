@@ -248,6 +248,7 @@ a { color: inherit; }
 
 .table > :not(caption) > * > * { background: transparent; color: var(--text-color); border-color: var(--border-color); }
 .table-hover > tbody > tr:hover > * { background: var(--hover-bg); }
+.event-row:hover > * { outline: 1px solid var(--accent); outline-offset: -1px; }
 .avatar-sm { width: 22px; height: 22px; border-radius: 6px; image-rendering: pixelated; }
 
 .form-select, .form-control {
