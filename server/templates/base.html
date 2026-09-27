@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-bs-theme="dark">
+<html lang="ko" data-bs-theme="dark" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,11 +8,30 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="{{ url_for('static', filename='css/dashboard.css') }}" rel="stylesheet">
+  <script>
+    // 화면이 그려지기 전에 저장된 테마를 먼저 적용해서 깜빡임(다크->라이트 전환)을 막는다.
+    (function () {
+      try {
+        var saved = localStorage.getItem('sence_theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+          document.documentElement.setAttribute('data-bs-theme', saved);
+        }
+      } catch (e) { /* localStorage 막혀 있으면 기본(dark)으로 */ }
+    })();
+  </script>
 </head>
 <body {% block body_attrs %}{% endblock %}>
+{% block theme_toggle %}
+<button type="button" class="theme-toggle-btn" id="themeToggleBtn" title="테마 전환"
+        style="position: fixed; top: 14px; right: 14px; z-index: 1050;">
+  <i class="bi bi-moon-stars-fill" id="themeToggleIcon"></i>
+</button>
+{% endblock %}
 {% block body %}{% endblock %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

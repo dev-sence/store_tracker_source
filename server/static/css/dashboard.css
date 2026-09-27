@@ -1,5 +1,6 @@
 :root {
   --bg-deep: #0b0f14;
+  --bg-gradient-start: #16202c;
   --bg-panel: #121821;
   --bg-panel-2: #171f2b;
   --accent: #f1c40f;
@@ -7,16 +8,37 @@
   --take: #e74c3c;
   --deposit: #2ecc71;
   --border-soft: rgba(255, 255, 255, .08);
+  --text: #e8edf2;
+  --text-secondary: #8b98a8;
+  --input-bg: #0f151d;
+  --hover-bg: rgba(255, 255, 255, .04);
+  --scrollbar-thumb: #263140;
+  --avatar-fallback-bg: #2a3441;
+}
+
+:root[data-theme="light"] {
+  --bg-deep: #f6f8fa;
+  --bg-gradient-start: #eef1f4;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #f6f8fa;
+  --accent-soft: rgba(212, 167, 0, .14);
+  --border-soft: #d0d7de;
+  --text: #1f2328;
+  --text-secondary: #57606a;
+  --input-bg: #ffffff;
+  --hover-bg: rgba(31, 35, 40, .04);
+  --scrollbar-thumb: #d0d7de;
+  --avatar-fallback-bg: #eaeef2;
 }
 
 body {
-  background: radial-gradient(1200px 600px at 10% -10%, #16202c 0%, var(--bg-deep) 55%);
-  color: #e8edf2;
+  background: radial-gradient(1200px 600px at 10% -10%, var(--bg-gradient-start) 0%, var(--bg-deep) 55%);
+  color: var(--text);
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
 }
 
-.navbar-brand { font-weight: 700; letter-spacing: .02em; }
+.navbar-brand { font-weight: 700; letter-spacing: .02em; color: var(--text); }
 .navbar-brand .bi { color: var(--accent); }
 
 .panel {
@@ -32,29 +54,31 @@ body {
   padding: 1.1rem 1.3rem;
 }
 
-.stat-card .label { color: #8b98a8; font-size: .8rem; font-weight: 500; }
-.stat-card .value { font-size: 1.9rem; font-weight: 700; }
+.stat-card .label { color: var(--text-secondary); font-size: .8rem; font-weight: 500; }
+.stat-card .value { font-size: 1.9rem; font-weight: 700; color: var(--text); }
 .stat-card .bi { font-size: 1.6rem; color: var(--accent); opacity: .85; }
 
 .badge-take { background: var(--take); }
 .badge-deposit { background: var(--deposit); }
 
-.table > :not(caption) > * > * { background: transparent; color: #e8edf2; border-color: var(--border-soft); }
-.table-hover > tbody > tr:hover > * { background: rgba(255, 255, 255, .04); }
+.table > :not(caption) > * > * { background: transparent; color: var(--text); border-color: var(--border-soft); }
+.table-hover > tbody > tr:hover > * { background: var(--hover-bg); }
 
 .avatar-sm { width: 24px; height: 24px; border-radius: 6px; image-rendering: pixelated; }
 
-.section-title { font-weight: 700; letter-spacing: .01em; }
+.section-title { font-weight: 700; letter-spacing: .01em; color: var(--text); }
+
+.text-secondary { color: var(--text-secondary) !important; }
 
 .form-select, .form-control {
-  background-color: #0f151d;
+  background-color: var(--input-bg);
   border-color: var(--border-soft);
-  color: #e8edf2;
+  color: var(--text);
 }
 
 .form-select:focus, .form-control:focus {
-  background-color: #0f151d;
-  color: #e8edf2;
+  background-color: var(--input-bg);
+  color: var(--text);
   border-color: var(--accent);
   box-shadow: 0 0 0 .2rem var(--accent-soft);
 }
@@ -67,6 +91,17 @@ body {
 }
 
 .btn-accent:hover { background: #f5d43a; border-color: #f5d43a; color: #1a1300; }
+
+.btn-outline-light {
+  color: var(--text);
+  border-color: var(--border-soft);
+}
+
+.btn-outline-light:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+  border-color: var(--border-soft);
+}
 
 .live-dot {
   display: inline-block;
@@ -85,7 +120,7 @@ body {
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #263140; border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
 
 .login-card { width: 100%; max-width: 380px; }
 
@@ -106,16 +141,17 @@ body {
   padding: 4px 10px;
   border-radius: 20px;
   border: 1px solid var(--border-soft);
+  color: var(--text);
 }
 
-.profile-widget:hover { background: rgba(255, 255, 255, .05); }
+.profile-widget:hover { background: var(--hover-bg); }
 
 .profile-avatar {
   width: 26px;
   height: 26px;
   border-radius: 50%;
   object-fit: cover;
-  background: #2a3441;
+  background: var(--avatar-fallback-bg);
 }
 
 .refresh-spin { animation: spin 0.6s linear; }
@@ -124,3 +160,17 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+  padding: 4px 12px;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85rem;
+}
+
+.theme-toggle-btn:hover { background: var(--hover-bg); }

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Sence StoreTracker{% endblock %}
 {% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}"{% endblock %}
+{% block theme_toggle %}{% endblock %}
 {% block body %}
 <nav class="navbar navbar-expand-lg border-bottom" style="border-color: var(--border-soft) !important;">
   <div class="container-fluid px-4">
@@ -15,6 +16,9 @@
       </select>
       {% endif %}
       <button class="btn btn-sm btn-outline-light" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i></button>
+      <button type="button" class="theme-toggle-btn" id="themeToggleBtn" title="테마 전환">
+        <i class="bi bi-moon-stars-fill" id="themeToggleIcon"></i>
+      </button>
       <div class="profile-widget" id="profileWidget" title="클릭해서 마크 닉네임 수정">
         {% if discord_avatar %}
         <img src="{{ discord_avatar }}" class="profile-avatar" alt="">
