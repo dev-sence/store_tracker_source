@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Sence StoreTracker{% endblock %}
-{% block body_attrs %}data-map="{{ selected_map }}"{% endblock %}
+{% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}"{% endblock %}
 {% block body %}
 <nav class="navbar navbar-expand-lg border-bottom" style="border-color: var(--border-soft) !important;">
   <div class="container-fluid px-4">
@@ -15,6 +15,15 @@
       </select>
       {% endif %}
       <button class="btn btn-sm btn-outline-light" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i></button>
+      <div class="profile-widget" id="profileWidget" title="클릭해서 마크 닉네임 수정">
+        {% if discord_avatar %}
+        <img src="{{ discord_avatar }}" class="profile-avatar" alt="">
+        {% else %}
+        <i class="bi bi-person-circle" style="font-size:1.4rem;"></i>
+        {% endif %}
+        <span class="small" id="profileName">{{ profile_name }}</span>
+        <i class="bi bi-pencil-fill text-secondary" style="font-size:.7rem;"></i>
+      </div>
       <a href="#" id="logoutLink" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right"></i> 로그아웃</a>
     </div>
   </div>

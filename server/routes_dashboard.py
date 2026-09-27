@@ -1,17 +1,32 @@
+import secrets
 from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
+import discord_oauth
 from models import ChestInventoryItem, Event, Member, PlayerItemLedger, PublicItemType, TrackedChest, db
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
+def _redirect_uri() -> str:
+    configured = current_app.config.get("DISCORD_REDIRECT_URI")
+    return configured or url_for("dashboard.discord_callback", _external=True)
+
+
+def _current_member():
+    discord_id = session.get("discord_id")
+    if not discord_id:
+        return None
+    return Member.query.filter_by(discord_id=discord_id).first()
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get("admin"):
+        # 매 요청마다 다시 확인해서, 관리자가 나중에 멤버를 빼면 바로 접근이 끊기게 한다.
+        if _current_member() is None:
             return redirect(url_for("dashboard.login"))
         return fn(*args, **kwargs)
 
@@ -20,19 +35,103 @@ def login_required(fn):
 
 @dashboard_bp.get("/login")
 def login():
-    if session.get("admin"):
+    if _current_member() is not None:
         return redirect(url_for("dashboard.index"))
     return render_template("login.html")
 
 
-@dashboard_bp.post("/login")
-def login_submit():
-    token = (request.form.get("token") or "").strip()
-    if token and token == current_app.config["ADMIN_TOKEN"]:
-        session["admin"] = True
-        session.permanent = True
+@dashboard_bp.get("/discord/login")
+def discord_login():
+    state = secrets.token_urlsafe(16)
+    session["oauth_state"] = state
+    authorize_url = discord_oauth.build_authorize_url(
+        current_app.config["DISCORD_CLIENT_ID"], _redirect_uri(), state,
+    )
+    return redirect(authorize_url)
+
+
+@dashboard_bp.get("/discord/callback")
+def discord_callback():
+    if request.args.get("error"):
+        return redirect(url_for("dashboard.login", error="1"))
+
+    state = request.args.get("state")
+    expected_state = session.pop("oauth_state", None)
+    code = request.args.get("code")
+    if not code or not state or state != expected_state:
+        return redirect(url_for("dashboard.login", error="1"))
+
+    token_data = discord_oauth.exchange_code(
+        current_app.config["DISCORD_CLIENT_ID"],
+        current_app.config["DISCORD_CLIENT_SECRET"],
+        _redirect_uri(),
+        code,
+    )
+    if not token_data or "access_token" not in token_data:
+        return redirect(url_for("dashboard.login", error="1"))
+
+    user = discord_oauth.fetch_oauth_user(token_data["access_token"])
+    if not user or "id" not in user:
+        return redirect(url_for("dashboard.login", error="1"))
+
+    discord_id = str(user["id"])
+    session["discord_id"] = discord_id
+    session["discord_username"] = user.get("global_name") or user.get("username") or "디스코드 사용자"
+    session["discord_avatar"] = discord_oauth.avatar_url(user)
+    session.permanent = True
+
+    member = Member.query.filter_by(discord_id=discord_id).first()
+    if member is not None:
         return redirect(url_for("dashboard.index"))
-    return redirect(url_for("dashboard.login", error="1"))
+
+    # 아직 이 디스코드 계정과 연결된 멤버가 없다 - 서버 별명에서 마크 닉네임을 추정해본다.
+    guessed = discord_oauth.guess_minecraft_username(
+        current_app.config["DISCORD_BOT_TOKEN"], current_app.config["DISCORD_GUILD_ID"], discord_id,
+    )
+    if guessed:
+        candidate = Member.query.filter(
+            db.func.lower(Member.minecraft_username) == guessed.lower(),
+            Member.discord_id.is_(None),
+        ).first()
+        if candidate is not None:
+            candidate.discord_id = discord_id
+            db.session.commit()
+            return redirect(url_for("dashboard.index"))
+
+    return redirect(url_for("dashboard.link_profile", guessed=guessed or ""))
+
+
+@dashboard_bp.get("/link")
+def link_profile():
+    if "discord_id" not in session:
+        return redirect(url_for("dashboard.login"))
+    if _current_member() is not None:
+        return redirect(url_for("dashboard.index"))
+    return render_template(
+        "link.html",
+        guessed=request.args.get("guessed", ""),
+        error=request.args.get("error"),
+    )
+
+
+@dashboard_bp.post("/link")
+def link_profile_submit():
+    discord_id = session.get("discord_id")
+    if not discord_id:
+        return redirect(url_for("dashboard.login"))
+
+    username = (request.form.get("username") or "").strip()
+    member = Member.query.filter(
+        db.func.lower(Member.minecraft_username) == username.lower(),
+        Member.discord_id.is_(None),
+    ).first() if username else None
+
+    if member is None:
+        return redirect(url_for("dashboard.link_profile", error="1"))
+
+    member.discord_id = discord_id
+    db.session.commit()
+    return redirect(url_for("dashboard.index"))
 
 
 @dashboard_bp.get("/logout")
@@ -44,12 +143,42 @@ def logout():
 @dashboard_bp.get("/")
 @login_required
 def index():
+    member = _current_member()
     map_keys = sorted({
         row[0] for row in db.session.query(TrackedChest.map_key).distinct()
         if row[0]
     })
     selected_map = request.args.get("map") or (map_keys[0] if map_keys else "")
-    return render_template("dashboard.html", map_keys=map_keys, selected_map=selected_map)
+    return render_template(
+        "dashboard.html",
+        map_keys=map_keys,
+        selected_map=selected_map,
+        profile_name=member.minecraft_username,
+        discord_username=session.get("discord_username"),
+        discord_avatar=session.get("discord_avatar"),
+    )
+
+
+@dashboard_bp.post("/api/profile/username")
+@login_required
+def update_profile_username():
+    member = _current_member()
+    new_username = (request.get_json(silent=True) or {}).get("username", "").strip()
+    if not new_username:
+        return jsonify({"error": "username is required"}), 400
+    if len(new_username) > 32:
+        return jsonify({"error": "username too long"}), 400
+
+    existing = Member.query.filter(
+        db.func.lower(Member.minecraft_username) == new_username.lower(),
+        Member.id != member.id,
+    ).first()
+    if existing is not None:
+        return jsonify({"error": "이미 사용 중인 닉네임입니다"}), 409
+
+    member.minecraft_username = new_username
+    db.session.commit()
+    return jsonify({"status": "ok", "username": member.minecraft_username})
 
 
 def _dashboard_data(map_key: str):

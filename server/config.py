@@ -27,6 +27,11 @@ class Config:
     DISCORD_INVENTORY_CHANNEL_ID = os.environ.get("DISCORD_INVENTORY_CHANNEL_ID", "")
     # 디스코드 로깅을 끄고 싶을 때(웹 대시보드로 대체 등) 봇 토큰은 그대로 두고 이 값만 0으로 바꾸면 된다.
     DISCORD_POSTING_ENABLED = os.environ.get("DISCORD_POSTING_ENABLED", "1") == "1"
+    # 웹 대시보드 로그인용 디스코드 OAuth2 - 기존 봇과 같은 Application을 그대로 쓴다 (Client ID = 봇 유저 ID).
+    DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "")
+    DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
+    DISCORD_GUILD_ID = os.environ.get("DISCORD_GUILD_ID", "")
+    DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "")
     _database_url = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
     # Neon/Render가 주는 접속 문자열은 옛 표기인 "postgres://"로 시작하는 경우가 있는데,
     # SQLAlchemy(2.x)는 이 스킴을 인식하지 못해 "postgresql://"로 바꿔줘야 한다.

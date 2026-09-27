@@ -27,7 +27,56 @@
   }
 
   function bindRefreshButton() {
-    document.getElementById('refreshBtn').addEventListener('click', () => refresh(true));
+    const btn = document.getElementById('refreshBtn');
+    btn.addEventListener('click', () => {
+      const icon = btn.querySelector('i');
+      icon.classList.remove('refresh-spin');
+      // eslint-disable-next-line no-unused-expressions
+      icon.offsetWidth; // 리플로우를 강제해서 연속 클릭에도 애니메이션이 다시 시작되게 한다.
+      icon.classList.add('refresh-spin');
+      refresh(true);
+    });
+  }
+
+  function bindProfileWidget() {
+    const widget = document.getElementById('profileWidget');
+    if (!widget) return;
+    widget.addEventListener('click', async () => {
+      const nameEl = document.getElementById('profileName');
+      const { value: username } = await Swal.fire({
+        title: '마크 닉네임 수정',
+        input: 'text',
+        inputValue: nameEl.textContent.trim(),
+        inputPlaceholder: '마인크래프트 닉네임',
+        showCancelButton: true,
+        confirmButtonText: '저장',
+        cancelButtonText: '취소',
+        background: '#121821',
+        color: '#e8edf2',
+        confirmButtonColor: '#f1c40f',
+        inputValidator: (value) => (!value || !value.trim() ? '닉네임을 입력해주세요.' : undefined),
+      });
+
+      if (!username || username.trim() === nameEl.textContent.trim()) {
+        return;
+      }
+
+      try {
+        const result = await StoreTrackerApi.updateProfileUsername(username.trim());
+        nameEl.textContent = result.username;
+        document.body.dataset.username = result.username;
+        StoreTrackerRender.toast('success', '닉네임이 저장됐습니다');
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: '저장 실패',
+          text: err.message,
+          background: '#121821',
+          color: '#e8edf2',
+          confirmButtonColor: '#f1c40f',
+        });
+      }
+    });
   }
 
   function bindLogout() {
@@ -52,6 +101,7 @@
 
   bindMapSelect();
   bindRefreshButton();
+  bindProfileWidget();
   bindLogout();
   refresh(false);
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);

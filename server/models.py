@@ -17,6 +17,8 @@ class Member(db.Model):
     minecraft_uuid = db.Column(db.String(36), nullable=True)
     added_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     added_by = db.Column(db.String(64), nullable=True)
+    # 웹 대시보드를 디스코드 로그인으로 여는 사람과 이 멤버를 연결해둔다 (아직 아무도 로그인 안 했으면 None).
+    discord_id = db.Column(db.String(32), nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -25,6 +27,7 @@ class Member(db.Model):
             "minecraft_uuid": self.minecraft_uuid,
             "added_at": self.added_at.isoformat(),
             "added_by": self.added_by,
+            "discord_id": self.discord_id,
         }
 
 
