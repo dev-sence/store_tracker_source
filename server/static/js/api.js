@@ -76,6 +76,36 @@ const StoreTrackerApi = {
     return data;
   },
 
+  async fetchMembers() {
+    const res = await fetch('/api/admin/members');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async addMember(username) {
+    const res = await fetch('/api/admin/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async deleteMember(memberId) {
+    const res = await fetch(`/api/admin/members/${memberId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+  },
+
   async adjustInventory(mapKey, itemId, count) {
     const res = await fetch('/api/admin/inventory/adjust', {
       method: 'POST',

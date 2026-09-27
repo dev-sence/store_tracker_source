@@ -137,6 +137,40 @@ const StoreTrackerRender = {
     document.getElementById('chestStrictSwitch').addEventListener('change', onToggle);
   },
 
+  members(list, currentUsername, onDelete) {
+    const container = document.getElementById('memberList');
+    const escape = this.escapeHtml;
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">등록된 멤버가 없습니다.</div>';
+      return;
+    }
+
+    container.innerHTML = list.map((m) => {
+      const linked = m.discord_id
+        ? '<span class="badge bg-success">연동됨</span>'
+        : '<span class="badge bg-secondary">미연동</span>';
+      const isSelf = m.minecraft_username.toLowerCase() === currentUsername.toLowerCase();
+      const deleteBtn = isSelf
+        ? ''
+        : `<button class="btn btn-sm btn-outline-danger py-0 px-2 member-delete-btn"
+             data-member-id="${m.id}" data-username="${escape(m.minecraft_username)}">
+             <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">delete</span>
+           </button>`;
+
+      return `<div class="d-flex align-items-center justify-content-between panel p-2 px-3">
+        <div class="d-flex align-items-center gap-2">
+          <span>${escape(m.minecraft_username)}</span>
+          ${linked}
+        </div>
+        ${deleteBtn}
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.member-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', () => onDelete(btn.dataset.memberId, btn.dataset.username));
+    });
+  },
+
   requestLogDetail(log) {
     const escape = this.escapeHtml;
     let payloadPretty = '(없음)';

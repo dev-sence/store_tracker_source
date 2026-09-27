@@ -201,6 +201,66 @@
     }
   }
 
+  async function handleAddMember() {
+    const { value: username } = await Swal.fire({
+      title: '멤버 추가',
+      input: 'text',
+      inputPlaceholder: '마인크래프트 닉네임',
+      showCancelButton: true,
+      confirmButtonText: '추가',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+      inputValidator: (value) => (!value || !value.trim() ? '닉네임을 입력해주세요.' : undefined),
+    });
+
+    if (!username) return;
+
+    try {
+      await StoreTrackerApi.addMember(username.trim());
+      StoreTrackerRender.toast('success', '멤버가 추가됐습니다');
+      loadMembers();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '추가 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function handleDeleteMember(memberId, username) {
+    const result = await Swal.fire({
+      title: `${username} 삭제할까요?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await StoreTrackerApi.deleteMember(memberId);
+      StoreTrackerRender.toast('success', '멤버가 삭제됐습니다');
+      loadMembers();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '삭제 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  async function loadMembers() {
+    if (!isAdmin) return;
+    try {
+      const members = await StoreTrackerApi.fetchMembers();
+      StoreTrackerRender.members(members, document.body.dataset.username, handleDeleteMember);
+    } catch (err) {
+      const container = document.getElementById('memberList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  function bindAddMemberButton() {
+    const btn = document.getElementById('addMemberBtn');
+    if (!btn) return;
+    btn.addEventListener('click', handleAddMember);
+  }
+
   function bindLogout() {
     document.getElementById('logoutLink').addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -226,9 +286,11 @@
   bindProfileName();
   bindDetailedLogToggle();
   bindEventRowClicks();
+  bindAddMemberButton();
   bindLogout();
   refresh(false);
   loadFeatureToggles();
   loadChestStrict();
+  loadMembers();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();

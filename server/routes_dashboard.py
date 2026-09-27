@@ -354,6 +354,47 @@ def admin_request_log_for_event(event_id):
     return jsonify(log.to_dict())
 
 
+@dashboard_bp.get("/api/admin/members")
+@admin_required
+def admin_list_members():
+    members = Member.query.order_by(Member.added_at.desc()).all()
+    return jsonify([m.to_dict() for m in members])
+
+
+@dashboard_bp.post("/api/admin/members")
+@admin_required
+def admin_add_member():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+    if len(username) > 32:
+        return jsonify({"error": "username too long"}), 400
+
+    if Member.query.filter(db.func.lower(Member.minecraft_username) == username.lower()).first():
+        return jsonify({"error": "이미 등록된 닉네임입니다"}), 409
+
+    admin_member = _current_member()
+    member = Member(minecraft_username=username, added_by=admin_member.minecraft_username)
+    db.session.add(member)
+    db.session.commit()
+    return jsonify(member.to_dict()), 201
+
+
+@dashboard_bp.delete("/api/admin/members/<int:member_id>")
+@admin_required
+def admin_remove_member(member_id):
+    member = Member.query.get(member_id)
+    if member is None:
+        return jsonify({"error": "not found"}), 404
+    if member.id == _current_member().id:
+        return jsonify({"error": "자기 자신은 삭제할 수 없습니다"}), 400
+
+    db.session.delete(member)
+    db.session.commit()
+    return "", 204
+
+
 @dashboard_bp.post("/api/admin/inventory/adjust")
 @admin_required
 def admin_adjust_inventory():
