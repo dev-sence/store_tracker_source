@@ -38,10 +38,15 @@ const StoreTrackerRender = {
     const escape = this.escapeHtml;
     const formatTime = this.formatTime;
 
+    const badgeInfo = {
+      TAKE: { cls: 'badge-take', label: '출고' },
+      DEPOSIT: { cls: 'badge-deposit', label: '입고' },
+      HOLD: { cls: 'badge-take', label: '수동 사용' },
+      RELEASE: { cls: 'badge-deposit', label: '수동 반납' },
+    };
+
     body.innerHTML = list.map((e) => {
-      const isTake = e.action === 'TAKE';
-      const badgeClass = isTake ? 'badge-take' : (e.action === 'DEPOSIT' ? 'badge-deposit' : 'bg-secondary');
-      const label = isTake ? '출고' : (e.action === 'DEPOSIT' ? '입고' : e.action);
+      const { cls: badgeClass, label } = badgeInfo[e.action] || { cls: 'bg-secondary', label: e.action };
       const avatar = `https://mc-heads.net/avatar/${encodeURIComponent(e.minecraft_username)}/32`;
 
       const position = e.dimension ? `${e.dimension} (${e.pos_x}, ${e.pos_y}, ${e.pos_z})` : '-';
@@ -64,7 +69,7 @@ const StoreTrackerRender = {
     }).join('');
   },
 
-  inventory(items, isDeveloper, onEdit) {
+  inventory(items, isDeveloper, onEdit, onManualTransfer) {
     const body = document.getElementById('inventoryBody');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">등록된 공용템이 없습니다.</td></tr>';
@@ -77,17 +82,22 @@ const StoreTrackerRender = {
       const holders = item.holders.length
         ? item.holders.map((h) => `${escape(h.username)} <span class="text-secondary">x${h.count}</span>`).join(', ')
         : '<span class="text-secondary">없음</span>';
-      const editBtn = isDeveloper
+      const actionBtns = isDeveloper
         ? `<button class="btn btn-sm btn-outline-light py-0 px-1 ms-2 inventory-edit-btn"
              data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
              data-current="${item.stock}" title="재고 수동 수정">
              <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">edit</span>
+           </button>
+           <button class="btn btn-sm btn-outline-light py-0 px-1 ms-1 inventory-transfer-btn"
+             data-item-id="${escape(item.item_id)}" data-item-name="${escape(item.display_name)}"
+             title="수동 사용/반납">
+             <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">swap_horiz</span>
            </button>`
         : '';
 
       return `<tr>
         <td>${escape(item.display_name)}</td>
-        <td class="text-end fw-semibold">${item.stock}${editBtn}</td>
+        <td class="text-end fw-semibold">${item.stock}${actionBtns}</td>
         <td class="small">${holders}</td>
       </tr>`;
     }).join('');
@@ -95,6 +105,9 @@ const StoreTrackerRender = {
     if (isDeveloper) {
       body.querySelectorAll('.inventory-edit-btn').forEach((btn) => {
         btn.addEventListener('click', () => onEdit(btn.dataset.itemId, btn.dataset.itemName, Number(btn.dataset.current)));
+      });
+      body.querySelectorAll('.inventory-transfer-btn').forEach((btn) => {
+        btn.addEventListener('click', () => onManualTransfer(btn.dataset.itemId, btn.dataset.itemName));
       });
     }
   },

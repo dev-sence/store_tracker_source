@@ -484,3 +484,85 @@ def admin_adjust_inventory():
         row.count = count
     db.session.commit()
     return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
+
+
+@dashboard_bp.post("/api/admin/manual-transfer")
+@developer_required
+def admin_manual_transfer():
+    """상자를 거치지 않고 공용템을 가져가거나 반납한 경우를 위한 수동 사용/반납 기록.
+    실제 TAKE/DEPOSIT과 똑같이 재고와 보유 장부를 증감시키고 Event로도 남기지만,
+    실제 상자 상호작용 없이 개발자가 직접 입력한다는 걸 구분하려고 action은 HOLD(사용)/RELEASE(반납)를 쓴다."""
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    item_id = data.get("item_id")
+    username = (data.get("username") or "").strip()
+    action = data.get("action")
+    try:
+        count = int(data.get("count"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid count"}), 400
+
+    if not map_key or not item_id or not username or count <= 0 or action not in ("HOLD", "RELEASE"):
+        return jsonify({"error": "invalid request"}), 400
+
+    member = Member.query.filter(db.func.lower(Member.minecraft_username) == username.lower()).first()
+    if member is None:
+        return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
+    username = member.minecraft_username
+
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "no registered chest for this map"}), 404
+
+    catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
+    display_name = catalog_entry.display_name if catalog_entry else item_id
+
+    stock_row = ChestInventoryItem.query.filter_by(
+        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
+    ).first()
+    current_stock = stock_row.count if stock_row else 0
+    ledger_row = PlayerItemLedger.query.filter_by(
+        map_key=map_key, minecraft_username=username, item_id=item_id,
+    ).first()
+    current_held = ledger_row.held_count if ledger_row else 0
+
+    if action == "HOLD" and count > current_stock:
+        return jsonify({"error": f"재고({current_stock}개)보다 많이 뺄 수 없습니다"}), 400
+    if action == "RELEASE" and count > current_held:
+        return jsonify({"error": f"{username}님이 들고 있는 개수({current_held}개)보다 많이 반납할 수 없습니다"}), 400
+
+    stock_delta = -count if action == "HOLD" else count
+    ledger_delta = count if action == "HOLD" else -count
+
+    if stock_row is None:
+        stock_row = ChestInventoryItem(
+            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
+            item_id=item_id, display_name=display_name, count=0,
+        )
+        db.session.add(stock_row)
+    stock_row.count = max(0, stock_row.count + stock_delta)
+
+    if ledger_row is None:
+        ledger_row = PlayerItemLedger(map_key=map_key, minecraft_username=username, item_id=item_id, held_count=0)
+        db.session.add(ledger_row)
+    ledger_row.held_count = max(0, ledger_row.held_count + ledger_delta)
+
+    event = Event(
+        minecraft_username=username, item_id=item_id, item_name=display_name,
+        action=action, count=count, occurred_at=datetime.now(timezone.utc),
+        map_key=map_key, dimension=chest.dimension, pos_x=chest.x, pos_y=chest.y, pos_z=chest.z,
+        chest_label=f"{chest.label} (수동)",
+    )
+    db.session.add(event)
+    db.session.flush()
+
+    admin_member = _current_member()
+    db.session.add(RequestLog(
+        endpoint="manual-transfer", minecraft_username=username, ip=request.remote_addr,
+        result=f"{'수동 사용' if action == 'HOLD' else '수동 반납'}: {display_name} x{count}"
+               f" (처리자: {admin_member.minecraft_username})",
+        payload=json.dumps(data, ensure_ascii=False), event_id=event.id,
+    ))
+    db.session.commit()
+
+    return jsonify(event.to_dict())

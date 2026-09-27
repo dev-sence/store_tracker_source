@@ -9,7 +9,7 @@
       const data = await StoreTrackerApi.fetchDashboardData(currentMap);
       StoreTrackerRender.stats(data);
       StoreTrackerRender.events(data.events, isDeveloper);
-      StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit);
+      StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit, handleManualTransfer);
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }
@@ -46,6 +46,50 @@
       Swal.fire({
         icon: 'error', title: '수정 실패', text: err.message, ...StoreTrackerRender.swalTheme(),
       });
+    }
+  }
+
+  async function handleManualTransfer(itemId, itemName) {
+    const escape = StoreTrackerRender.escapeHtml;
+    const { value: form } = await Swal.fire({
+      title: '수동 사용 / 반납',
+      html: `
+        <div class="text-start small text-secondary mb-2">${escape(itemName)}</div>
+        <select id="swalTransferAction" class="swal2-select" style="display:block; width:100%;">
+          <option value="HOLD">수동 사용 (상자 밖에서 가져감)</option>
+          <option value="RELEASE">수동 반납 (상자 없이 돌려줌)</option>
+        </select>
+        <input id="swalTransferUsername" class="swal2-input" placeholder="마인크래프트 닉네임">
+        <input id="swalTransferCount" class="swal2-input" type="number" min="1" step="1" value="1" placeholder="개수">
+      `,
+      showCancelButton: true,
+      confirmButtonText: '적용',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+      preConfirm: () => {
+        const action = document.getElementById('swalTransferAction').value;
+        const username = document.getElementById('swalTransferUsername').value.trim();
+        const count = Number(document.getElementById('swalTransferCount').value);
+        if (!username) {
+          Swal.showValidationMessage('닉네임을 입력해주세요.');
+          return false;
+        }
+        if (!count || count <= 0) {
+          Swal.showValidationMessage('1 이상의 숫자를 입력해주세요.');
+          return false;
+        }
+        return { action, username, count };
+      },
+    });
+
+    if (!form) return;
+
+    try {
+      await StoreTrackerApi.manualTransfer(currentMap, itemId, form.username, form.count, form.action);
+      StoreTrackerRender.toast('success', form.action === 'HOLD' ? '수동 사용이 기록됐습니다' : '수동 반납이 기록됐습니다');
+      refresh(false);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '처리 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
     }
   }
 
