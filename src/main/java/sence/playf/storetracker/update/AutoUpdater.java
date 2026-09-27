@@ -23,12 +23,15 @@ import java.util.Optional;
  * 내려받아 mods 폴더를 바꿔치기하던 예전 방식 대신이다.
  *
  * 다만 지금 실행 중인 jar 파일은 JVM이 열어서 쓰고 있어서 그 자리에서 바로 덮어쓸 수 없다
- * (특히 Windows는 열려 있는 파일을 다른 파일로 교체하는 것 자체가 막혀 있다). 그래서:
- *   1. 새 jar를 mods 폴더 밖의 임시 위치에 받아둔다.
- *   2. JVM이 완전히 종료되는 시점(shutdown hook)에 원래 jar 파일을 지우고 새 파일을 그 자리로 옮긴다.
- * 즉 "지금 당장 핫스왑"이 아니라 "다음에 게임을 다시 켜면 새 버전"이다. 그 사이 강제 종료 등으로
- * 교체가 실패해도 그냥 다음 실행 때 다시 받아서 재시도하면 되니 안전하다(기존 jar를 건드리는 시점은
- * 새 파일이 100% 온전히 받아진 뒤뿐이라, 실패해도 기존 mods 폴더가 깨지는 일은 없다).
+ * (특히 Windows는 열려 있는 파일을 다른 파일로 교체하는 것 자체가 막혀 있다). 그래서 새 jar를
+ * mods 폴더 밖의 임시 위치에 받아두고, 실제 파일 교체는 이 게임 프로세스와 독립적인 별도 프로세스가
+ * 맡는다(Windows에선 PowerShell 스크립트를 백그라운드로 하나 띄운다). shutdown hook은 JVM이
+ * "종료 중"인 시점에 실행되는 거라, 그 순간에도 클래스로더가 아직 jar 파일 핸들을 붙들고 있어서
+ * 실제로 해보면 항상 파일 잠금 실패로 끝난다(실제 테스트에서 확인됨) - 그래서 그 방식은 안 쓴다.
+ * 대신 띄워둔 별도 프로세스가 게임이 완전히 종료돼서 OS가 파일 잠금을 풀 때까지 몇 초 간격으로
+ * 계속 재시도하다가, 풀리는 순간 옮겨치기한다. 즉 "지금 당장 핫스왑"이 아니라 "게임을 끄면 그 직후
+ * 적용되고, 다음에 다시 켜면 새 버전"이다. 그 사이 문제가 생겨도 pendingJar는 그대로 남아있으니
+ * 다음 실행 때 다시 시도하면 되므로 안전하다.
  */
 public final class AutoUpdater {
     private static final Logger LOGGER = LoggerFactory.getLogger("sence_storetracker");
@@ -115,16 +118,45 @@ public final class AutoUpdater {
                 .map(List::getFirst);
     }
 
-    /** JVM이 완전히 끝날 때 원래 jar를 새 jar로 바꿔치기한다 - 실행 중엔 파일이 잠겨 있어서 지금은 못 한다. */
+    /**
+     * 지금 이 게임 프로세스와 무관하게, 게임이 완전히 종료돼서 jar 파일 잠금이 풀리는 순간
+     * 새 파일로 바꿔치기하는 역할만 하는 별도 프로세스를 하나 띄운다. 이 프로세스는 게임을
+     * 껐다 켜는 것과 무관하게 백그라운드에서 계속 재시도하다가, 성공하면 스스로 종료된다.
+     */
     private static void scheduleSwap(Path currentJar, Path pendingJar) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                Files.move(pendingJar, currentJar, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                // 실패해도 pendingJar는 그대로 남아있으니 다음 실행 때 다시 시도된다.
-                LOGGER.warn("업데이트 파일 교체 실패 - 다음 실행 때 다시 시도합니다", e);
+        String os = System.getProperty("os.name", "").toLowerCase();
+        try {
+            if (os.contains("win")) {
+                scheduleSwapWindows(currentJar, pendingJar);
+            } else {
+                // Windows가 아니면 열려 있는 파일도 그냥 옮겨치기(rename)가 되는 경우가 대부분이라
+                // 바로 시도해보고, 안 되면(드묾) 다음 실행 때 재시도되게 조용히 넘어간다.
+                try {
+                    Files.move(pendingJar, currentJar, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    LOGGER.warn("업데이트 파일 교체 실패 - 다음 실행 때 다시 시도합니다", e);
+                }
             }
-        }, "sence-storetracker-update-swap"));
+        } catch (IOException e) {
+            LOGGER.warn("업데이트 교체용 도우미 프로세스를 띄우지 못했습니다 - 다음 실행 때 다시 시도합니다", e);
+        }
+    }
+
+    private static void scheduleSwapWindows(Path currentJar, Path pendingJar) throws IOException {
+        // 최대 30분(1800 * 1초) 동안 1초 간격으로 재시도한다 - 그 사이 게임이 완전히 꺼지면
+        // Windows가 파일 잠금을 풀어서 바로 성공한다. 따옴표는 PowerShell 작은따옴표 이스케이프('').
+        String pendingStr = pendingJar.toAbsolutePath().toString().replace("'", "''");
+        String currentStr = currentJar.toAbsolutePath().toString().replace("'", "''");
+        String script = "$p = '" + pendingStr + "'; $c = '" + currentStr + "'; "
+                + "for ($i = 0; $i -lt 1800; $i++) { "
+                + "try { Move-Item -Force -LiteralPath $p -Destination $c -ErrorAction Stop; exit 0 } "
+                + "catch { Start-Sleep -Seconds 1 } }";
+
+        ProcessBuilder builder = new ProcessBuilder(
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script);
+        builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        builder.redirectError(ProcessBuilder.Redirect.DISCARD);
+        builder.start();
     }
 
     private static void notifyPlayer(String message) {
