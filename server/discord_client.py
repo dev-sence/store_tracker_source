@@ -2,6 +2,7 @@ import logging
 import time
 
 import requests
+from flask import current_app
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,8 @@ def post_dev_log(bot_token: str, channel_id: str, *, endpoint: str, username: st
 
 
 def _send(bot_token: str, channel_id: str, embed: dict) -> bool:
+    if not current_app.config.get("DISCORD_POSTING_ENABLED", True):
+        return False
     if _in_backoff():
         logger.info("디스코드 429 쿨다운 중이라 메시지 전송을 건너뜁니다.")
         return False
@@ -122,6 +125,8 @@ def post_or_edit(bot_token: str, channel_id: str, message_id: str | None, embeds
     새로 게시한다. 최종적으로 사용된(새로 만들어졌을 수도 있는) message_id를 반환한다."""
     if not bot_token or not channel_id:
         return None
+    if not current_app.config.get("DISCORD_POSTING_ENABLED", True):
+        return message_id
     if _in_backoff():
         logger.info("디스코드 429 쿨다운 중이라 대시보드 갱신을 건너뜁니다.")
         return message_id
