@@ -7,11 +7,17 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 
 import discord_backoff
 import discord_oauth
-from models import ChestInventoryItem, Event, Member, PlayerItemLedger, PublicItemType, TrackedChest, db
+from models import (
+    ChestInventoryItem, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType, TrackedChest, db,
+)
 
 logger = logging.getLogger(__name__)
 
 dashboard_bp = Blueprint("dashboard", __name__)
+
+# 대시보드에서 로그 상세보기/기능 토글처럼 민감한 걸 만질 수 있는 사람 (마크 닉네임 기준, 소문자 비교).
+ADMIN_USERNAMES = {"sence1012"}
+TOGGLE_KEYS = ("label_overlay", "public_tag", "passthrough_tracking", "chest_log")
 
 
 def _redirect_uri() -> str:
@@ -24,6 +30,21 @@ def _current_member():
     if not discord_id:
         return None
     return Member.query.filter_by(discord_id=discord_id).first()
+
+
+def _is_admin(member) -> bool:
+    return member is not None and member.minecraft_username.lower() in ADMIN_USERNAMES
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        member = _current_member()
+        if not _is_admin(member):
+            return jsonify({"error": "unauthorized"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def login_required(fn):
@@ -167,6 +188,7 @@ def index():
         profile_name=member.minecraft_username,
         discord_username=session.get("discord_username"),
         discord_avatar=session.get("discord_avatar"),
+        is_admin=_is_admin(member),
     )
 
 
@@ -254,3 +276,39 @@ def _dashboard_data(map_key: str):
 def dashboard_data():
     map_key = request.args.get("map", "")
     return jsonify(_dashboard_data(map_key))
+
+
+@dashboard_bp.get("/api/admin/feature-toggles")
+@admin_required
+def admin_get_feature_toggles():
+    map_key = request.args.get("map", "")
+    if not map_key:
+        return jsonify({"error": "map is required"}), 400
+    toggle = FeatureToggle.query.filter_by(map_key=map_key).first()
+    if toggle is None:
+        return jsonify({k: True for k in TOGGLE_KEYS})
+    return jsonify(toggle.to_dict())
+
+
+@dashboard_bp.post("/api/admin/feature-toggles")
+@admin_required
+def admin_toggle_feature():
+    data = request.get_json(silent=True) or {}
+    map_key = data.get("map_key")
+    key = data.get("key")
+    if not map_key or key not in TOGGLE_KEYS:
+        return jsonify({"error": "invalid request"}), 400
+
+    toggle = FeatureToggle.query.filter_by(map_key=map_key).first()
+    if toggle is None:
+        # Column(default=True)는 flush 전까지 적용 안 돼서, 바로 아래 getattr가 None을 볼 수 있다
+        # (not None == True라서 "뒤집기"가 항상 True로만 가버리는 버그가 됨) - 그래서 명시적으로 채운다.
+        toggle = FeatureToggle(
+            map_key=map_key, label_overlay=True, public_tag=True,
+            passthrough_tracking=True, chest_log=True,
+        )
+        db.session.add(toggle)
+
+    setattr(toggle, key, not getattr(toggle, key))
+    db.session.commit()
+    return jsonify(toggle.to_dict())

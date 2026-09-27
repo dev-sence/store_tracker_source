@@ -628,7 +628,12 @@ def toggle_feature():
     map_key = data["map_key"]
     toggle = FeatureToggle.query.filter_by(map_key=map_key).first()
     if toggle is None:
-        toggle = FeatureToggle(map_key=map_key)
+        # Column(default=True)는 flush 전까지 적용 안 돼서, 바로 아래 getattr가 None을 볼 수 있다
+        # (not None == True라서 "뒤집기"가 항상 True로만 가버리는 버그가 됨) - 그래서 명시적으로 채운다.
+        toggle = FeatureToggle(
+            map_key=map_key, label_overlay=True, public_tag=True,
+            passthrough_tracking=True, chest_log=True,
+        )
         db.session.add(toggle)
 
     setattr(toggle, data["key"], not getattr(toggle, data["key"]))

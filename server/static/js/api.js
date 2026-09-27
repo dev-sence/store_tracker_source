@@ -23,4 +23,25 @@ const StoreTrackerApi = {
     }
     return data;
   },
+
+  async fetchFeatureToggles(mapKey) {
+    const res = await fetch(`/api/admin/feature-toggles?map=${encodeURIComponent(mapKey)}`);
+    if (!res.ok) {
+      throw new Error(`request failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async toggleFeature(mapKey, key) {
+    const res = await fetch('/api/admin/feature-toggles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map_key: mapKey, key }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
 };

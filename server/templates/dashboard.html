@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Sence StoreTracker{% endblock %}
-{% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}"{% endblock %}
+{% block body_attrs %}data-map="{{ selected_map }}" data-username="{{ profile_name }}" data-is-admin="{{ 'true' if is_admin else 'false' }}"{% endblock %}
 {% block theme_toggle %}{% endblock %}
 {% block body %}
 <nav class="navbar">
@@ -43,6 +43,12 @@
           <span class="material-symbols-outlined">inventory_2</span>
           <span>재고 현황</span>
         </div>
+        {% if is_admin %}
+        <div class="nav-item" data-section="admin">
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+          <span>관리자</span>
+        </div>
+        {% endif %}
       </div>
     </div>
     <div class="bottom-buttons">
@@ -92,12 +98,22 @@
     </div>
 
     <div class="panel p-3 p-md-4" id="section-logs">
-      <div class="section-title mb-3"><span class="material-symbols-outlined">history</span>최근 입출고 로그</div>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="section-title"><span class="material-symbols-outlined">history</span>최근 입출고 로그</div>
+        {% if is_admin %}
+        <label class="text-secondary small d-flex align-items-center gap-1" style="cursor:pointer;">
+          <input type="checkbox" id="detailedLogToggle"> 상세 보기
+        </label>
+        {% endif %}
+      </div>
       <div style="max-height: 65vh; overflow-y: auto;">
         <table class="table table-hover align-middle mb-0">
           <thead>
             <tr class="text-secondary small">
               <th>시간</th><th>플레이어</th><th>아이템</th><th>동작</th><th class="text-end">수량</th><th>상자</th>
+              <th class="admin-col d-none">item_id</th>
+              <th class="admin-col d-none">위치</th>
+              <th class="admin-col d-none">map_key</th>
             </tr>
           </thead>
           <tbody id="eventsBody">
@@ -106,6 +122,16 @@
         </table>
       </div>
     </div>
+
+    {% if is_admin %}
+    <div class="panel p-3 p-md-4 mt-4" id="section-admin" style="display:none;">
+      <div class="section-title mb-3"><span class="material-symbols-outlined">admin_panel_settings</span>기능 토글</div>
+      <div class="text-secondary small mb-3">인게임 /dev_toggle과 동일하게 이 맵의 모든 유저에게 바로 적용됩니다.</div>
+      <div class="d-flex flex-column gap-2" id="featureToggleList">
+        <div class="text-secondary small">불러오는 중...</div>
+      </div>
+    </div>
+    {% endif %}
 
     <div class="panel p-3 p-md-4" id="section-inventory" style="display:none;">
       <div class="section-title mb-3"><span class="material-symbols-outlined">inventory_2</span>현재 재고 / 보유 현황</div>

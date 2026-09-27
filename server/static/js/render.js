@@ -44,6 +44,8 @@ const StoreTrackerRender = {
       const label = isTake ? '출고' : (e.action === 'DEPOSIT' ? '입고' : e.action);
       const avatar = `https://mc-heads.net/avatar/${encodeURIComponent(e.minecraft_username)}/32`;
 
+      const position = e.dimension ? `${e.dimension} (${e.pos_x}, ${e.pos_y}, ${e.pos_z})` : '-';
+
       return `<tr>
         <td class="text-secondary small">${formatTime(e.received_at)}</td>
         <td>
@@ -54,6 +56,9 @@ const StoreTrackerRender = {
         <td><span class="badge ${badgeClass}">${label}</span></td>
         <td class="text-end">${e.count}</td>
         <td class="text-secondary small">${escape(e.chest_label || '경유 상자')}</td>
+        <td class="admin-col d-none text-secondary small">${escape(e.item_id)}</td>
+        <td class="admin-col d-none text-secondary small">${escape(position)}</td>
+        <td class="admin-col d-none text-secondary small">${escape(e.map_key || '-')}</td>
       </tr>`;
     }).join('');
   },
@@ -78,6 +83,29 @@ const StoreTrackerRender = {
         <td class="small">${holders}</td>
       </tr>`;
     }).join('');
+  },
+
+  featureToggles(toggles, onToggle) {
+    const labels = {
+      label_overlay: '상자 제목 강조 오버레이',
+      public_tag: '[공용템] 툴팁 표시',
+      passthrough_tracking: '경유 상자 추적',
+      chest_log: '상자 열림/닫힘 로그',
+    };
+    const container = document.getElementById('featureToggleList');
+    container.innerHTML = Object.keys(labels).map((key) => {
+      const on = !!toggles[key];
+      return `<div class="d-flex align-items-center justify-content-between panel p-2 px-3">
+        <span class="small">${labels[key]}</span>
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" data-toggle-key="${key}" ${on ? 'checked' : ''}>
+        </div>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('input[data-toggle-key]').forEach((input) => {
+      input.addEventListener('change', () => onToggle(input.dataset.toggleKey));
+    });
   },
 
   toast(icon, title) {

@@ -1,8 +1,12 @@
 # Gradle / Fabric
 .gradle/
 build/
+dist/
 run/
 *.log
+
+# Claude Code local session state
+.claude/
 
 # IDE
 .idea/

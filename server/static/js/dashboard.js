@@ -1,6 +1,7 @@
 (function () {
   const REFRESH_INTERVAL_MS = 15000;
   const currentMap = document.body.dataset.map || '';
+  const isAdmin = document.body.dataset.isAdmin === 'true';
 
   async function refresh(manual) {
     try {
@@ -104,6 +105,38 @@
     });
   }
 
+  function bindDetailedLogToggle() {
+    const checkbox = document.getElementById('detailedLogToggle');
+    if (!checkbox) return;
+    checkbox.addEventListener('change', () => {
+      document.querySelectorAll('.admin-col').forEach((el) => {
+        el.classList.toggle('d-none', !checkbox.checked);
+      });
+    });
+  }
+
+  async function handleToggleClick(key) {
+    try {
+      const updated = await StoreTrackerApi.toggleFeature(currentMap, key);
+      StoreTrackerRender.featureToggles(updated, handleToggleClick);
+      StoreTrackerRender.toast('success', '적용됨 (모든 유저에게 곧 반영)');
+    } catch (err) {
+      StoreTrackerRender.toast('error', '전환 실패');
+      loadFeatureToggles();
+    }
+  }
+
+  async function loadFeatureToggles() {
+    if (!isAdmin || !currentMap) return;
+    try {
+      const toggles = await StoreTrackerApi.fetchFeatureToggles(currentMap);
+      StoreTrackerRender.featureToggles(toggles, handleToggleClick);
+    } catch (err) {
+      const container = document.getElementById('featureToggleList');
+      if (container) container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
   function bindLogout() {
     document.getElementById('logoutLink').addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -127,7 +160,9 @@
   bindSidebarNav();
   bindMobileMenu();
   bindProfileName();
+  bindDetailedLogToggle();
   bindLogout();
   refresh(false);
+  loadFeatureToggles();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();
