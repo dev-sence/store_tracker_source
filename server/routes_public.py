@@ -26,6 +26,17 @@ VALID_TOGGLE_KEYS = ("label_overlay", "public_tag", "passthrough_tracking", "che
 _DASHBOARD_REFRESH_MIN_INTERVAL = 3.0
 _last_dashboard_refresh: dict[str, float] = {}
 
+# 같은 서버인데 클라이언트마다 다른 문자열로 저장된 주소를 하나의 맵으로 합친다
+# (예: 상자 등록자의 마크 서버 목록엔 "playf.kr"로 저장돼 있었는데 실제 접속 주소는
+# "playfarm.kr"라서, 그 계정만 계속 정상 작동하고 실제 주소로 접속하는 일반 유저들은
+# 등록된 상자가 하나도 없는 것처럼 보였던 문제 - 데이터는 이미 playfarm.kr로 옮겼지만,
+# 등록자가 자기 서버 목록 주소를 안 바꾸면 또 갈라질 수 있어서 아예 코드에서 합친다).
+_MAP_KEY_ALIASES = {"playf.kr": "playfarm.kr"}
+
+
+def _normalize_map_key(map_key):
+    return _MAP_KEY_ALIASES.get(map_key, map_key)
+
 
 def _parse_encrypted_body():
     body = request.get_json(silent=True) or {}
@@ -33,9 +44,12 @@ def _parse_encrypted_body():
     if not payload:
         return None
     try:
-        return current_app.secure_channel.decrypt_json(payload)
+        data = current_app.secure_channel.decrypt_json(payload)
     except (InvalidTag, ValueError):
         return None
+    if isinstance(data, dict) and "map_key" in data:
+        data["map_key"] = _normalize_map_key(data["map_key"])
+    return data
 
 
 def _parse_occurred_at(raw: str) -> datetime:
@@ -402,7 +416,7 @@ def chest_log():
 
 @public_bp.get("/chests")
 def list_chests():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
 
@@ -487,7 +501,7 @@ def toggle_chest_strict():
 
 @public_bp.get("/public-items")
 def list_public_items():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
 
@@ -574,7 +588,7 @@ def remove_public_items():
 @public_bp.get("/held-items")
 def list_held_items():
     """이 플레이어가 등록 상자를 통해 지금 들고 있다고 인정되는 아이템 타입별 개수."""
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     username = request.args.get("username", "")
     if not map_key or not username:
         return jsonify({"error": "map, username이 필요합니다"}), 400
@@ -614,7 +628,7 @@ def reset_held_items():
 @public_bp.get("/feature-toggles")
 def get_feature_toggles():
     """맵별 기능 on/off 상태. 아직 한 번도 저장된 적 없으면 전부 켜짐(기존 동작)으로 응답한다."""
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
 
@@ -662,7 +676,7 @@ def toggle_feature():
 
 @public_bp.get("/chests/inventory")
 def chest_inventory():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     dimension = request.args.get("dimension", "")
     try:
         x = int(request.args.get("x"))
