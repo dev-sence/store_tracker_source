@@ -118,6 +118,13 @@ public final class ContainerTracker {
                     dimension, pos.getX(), pos.getY(), pos.getZ());
             String chestLabel = registered.map(ChestRegistry.RegisteredChest::label).orElse(null);
 
+            // 컨테이너 화면이 열릴 때마다(클릭마다가 아니라) 한 번만 찍히는 진단 로그 - 특정 유저에게서
+            // 입출고 추적이 통째로 안 되는 문제를 조사할 때, 애초에 이 지점까지 오는지/등록된 상자로
+            // 인식됐는지를 바로 확인하기 위함.
+            LOGGER.info("컨테이너 화면 열림: dimension={} pos=({},{},{}) registered={} slotCount={}",
+                    dimension, pos.getX(), pos.getY(), pos.getZ(),
+                    registered.map(ChestRegistry.RegisteredChest::label).orElse("(미등록)"), slotCount);
+
             // 큰 상자(더블 상자)는 블록이 2칸이라 어느 쪽을 클릭했느냐에 따라 실제 좌표가 달라지는데,
             // 서버 쪽 "이 상자의 재고"는 좌표를 키로 쓰기 때문에 그대로 보내면 같은 상자인데도
             // 양쪽 좌표에 재고가 각각 따로 쌓여서 합계가 부풀어 보이는 문제가 있었다. 그래서 등록된
@@ -245,6 +252,8 @@ public final class ContainerTracker {
             }
 
             String action = delta < 0 ? "TAKE" : "DEPOSIT";
+            LOGGER.info("입출고 감지: action={} item={} count={} registeredChest={}",
+                    action, names.getOrDefault(itemId, itemId), Math.abs(delta), isRegisteredChest);
             if (isRegisteredChest) {
                 // 서버 응답을 기다리지 않고 즉시 반영 - 체감 지연 없이 바로 [공용템] 표시/차단이 갱신된다.
                 HeldItemLedger.adjustLocal(itemId, action.equals("TAKE") ? Math.abs(delta) : -Math.abs(delta));
