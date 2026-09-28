@@ -2,7 +2,7 @@ from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
 
-from models import Event, Member, db
+from models import Event, Member, RequestLog, db
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -64,3 +64,21 @@ def list_events():
     limit = min(int(request.args.get("limit", 100)), 500)
     events = Event.query.order_by(Event.received_at.desc()).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
+
+
+@admin_bp.get("/request-logs")
+@require_admin
+def list_request_logs():
+    """실제 성공한 Event가 아니라, 서버에 도착한 모든 요청 시도(성공/실패 무관)를 본다.
+    username/endpoint로 좁혀서, 특정 유저의 요청이 서버에 도착조차 안 하는지
+    (클라이언트 문제) 도착은 했는데 거부됐는지(서버 로직 문제) 구분할 때 쓴다."""
+    limit = min(int(request.args.get("limit", 100)), 500)
+    query = RequestLog.query
+    username = request.args.get("username")
+    if username:
+        query = query.filter_by(minecraft_username=username)
+    endpoint = request.args.get("endpoint")
+    if endpoint:
+        query = query.filter_by(endpoint=endpoint)
+    logs = query.order_by(RequestLog.id.desc()).limit(limit).all()
+    return jsonify([l.to_dict() for l in logs])
