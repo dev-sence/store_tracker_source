@@ -2,7 +2,15 @@ from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
 
-from models import Event, Member, RequestLog, db
+from models import (
+    ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
+    RequestLog, TrackedChest, db,
+)
+
+# map_key 컬럼을 갖는 모든 테이블 - 맵 키 이름을 바꿀 때(/admin/rename-map-key) 전부 같이 옮긴다.
+_MAP_KEY_MODELS = [
+    TrackedChest, PublicItemType, ChestInventoryItem, PlayerItemLedger, FeatureToggle, Event, DashboardMessage,
+]
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -64,6 +72,28 @@ def list_events():
     limit = min(int(request.args.get("limit", 100)), 500)
     events = Event.query.order_by(Event.received_at.desc()).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
+
+
+@admin_bp.post("/rename-map-key")
+@require_admin
+def rename_map_key():
+    """등록 당시 실수로 다른 문자열로 등록된 맵 키를 실제 접속 주소로 옮긴다
+    (예: 상자 등록자의 서버 목록엔 "playf.kr"로 저장돼 있었는데 실제 접속 주소는
+    "playfarm.kr"라서, 일반 유저들 입장에선 등록된 상자가 하나도 없는 것처럼 보였던 문제)."""
+    data = request.get_json(silent=True) or {}
+    from_key = (data.get("from") or "").strip()
+    to_key = (data.get("to") or "").strip()
+    if not from_key or not to_key or from_key == to_key:
+        return jsonify({"error": "from, to가 필요하고 서로 달라야 합니다"}), 400
+
+    result = {}
+    for model in _MAP_KEY_MODELS:
+        rows = model.query.filter_by(map_key=from_key).all()
+        for row in rows:
+            row.map_key = to_key
+        result[model.__tablename__] = len(rows)
+    db.session.commit()
+    return jsonify({"status": "ok", "from": from_key, "to": to_key, "moved": result})
 
 
 @admin_bp.get("/request-logs")
