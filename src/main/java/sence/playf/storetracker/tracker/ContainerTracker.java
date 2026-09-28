@@ -222,13 +222,28 @@ public final class ContainerTracker {
             return;
         }
 
-        Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
-        Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
-        before.keySet().forEach(id -> names.putIfAbsent(id, id));
-
         String chestLabel = chest != null ? chest.label() : null;
         boolean isRegisteredChest = chestLabel != null;
 
+        // 바닐라 컨테이너 클릭은 "낙관적 예측"이다 - 클라이언트가 클릭 즉시 슬롯을 먼저 바꿔서
+        // 보여주고, 서버가 그 이동을 거부하면(귀속템이라 상자에 못 넣는 경우 등) 나중에 정정
+        // 패킷으로 되돌린다. afterClick 시점에 바로 스냅샷을 뜨면 이 "아직 서버가 거부하지 않은
+        // 순간"의 상태만 보게 돼서, 실제로는 거부된 이동을 성공한 입출고로 잘못 기록하는 버그가
+        // 있었다(귀속 아이템을 상자에 넣으려다 막혔는데 로그는 "넣음"으로 찍히고 [공용템] 태그까지
+        // 붙어버린 사례). 몇 틱 기다렸다가 다시 스냅샷을 떠서, 그 사이 서버가 되돌리지 않았는지
+        // 확인한 뒤에야 진짜 변화로 인정한다.
+        ClientDelay.runAfterTicks(4, () -> {
+            Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
+            Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
+            before.keySet().forEach(id -> names.putIfAbsent(id, id));
+
+            sendDetectedChanges(before, after, names, isRegisteredChest, chestLabel, dimension, pos);
+        });
+    }
+
+    private static void sendDetectedChanges(Map<String, Integer> before, Map<String, Integer> after,
+                                             Map<String, String> names, boolean isRegisteredChest,
+                                             String chestLabel, String dimension, BlockPos pos) {
         Set<String> itemIds = new HashSet<>();
         itemIds.addAll(before.keySet());
         itemIds.addAll(after.keySet());
