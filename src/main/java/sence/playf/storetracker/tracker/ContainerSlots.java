@@ -3,25 +3,61 @@ package sence.playf.storetracker.tracker;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
-import net.minecraft.screen.GenericContainerScreenHandler;
+import net.minecraft.screen.AnvilScreenHandler;
+import net.minecraft.screen.BeaconScreenHandler;
+import net.minecraft.screen.CartographyTableScreenHandler;
+import net.minecraft.screen.CraftingScreenHandler;
+import net.minecraft.screen.EnchantmentScreenHandler;
+import net.minecraft.screen.GrindstoneScreenHandler;
+import net.minecraft.screen.LoomScreenHandler;
+import net.minecraft.screen.MerchantScreenHandler;
+import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.ShulkerBoxScreenHandler;
+import net.minecraft.screen.SmithingScreenHandler;
+import net.minecraft.screen.StonecutterScreenHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /** 컨테이너(상자류) 스크린 핸들러의 "자기 자신 슬롯" 개수/내용을 다루는 공용 헬퍼. */
 public final class ContainerSlots {
+    private static final Logger LOGGER = LoggerFactory.getLogger("sence_storetracker");
 
-    /** 이 핸들러가 추적 가능한 컨테이너(상자/배럴/셔틀박스)이면 자기 슬롯 개수를, 아니면 null을 반환한다. */
+    // 바닐라 상자/배럴/셔틀박스뿐 아니라, 서버 플러그인이 구현하는 커스텀 상자류 GUI까지
+    // 전부 잡으려고 특정 클래스를 나열하는 대신 관례를 이용한다: 컨테이너류 화면은 항상
+    // 자기 슬롯 뒤에 "플레이어 인벤토리 27칸 + 단축바 9칸" = 36칸이 그대로 붙어 나온다
+    // (바닐라 GenericContainer/ShulkerBox는 물론, 서버 플러그인이 만드는 거의 모든 메뉴도
+    // 이 관례를 따른다). 예전엔 GenericContainerScreenHandler/ShulkerBoxScreenHandler
+    // 두 클래스만 알아봐서, 서버가 다른 방식으로 상자 GUI를 구현하면(커스텀 플러그인 메뉴 등)
+    // 여기서 조용히 null을 반환해 추적이 통째로 멈추는 문제가 있었다.
+    private static final int PLAYER_INVENTORY_SLOTS = 36;
+
+    // 저장 용도가 아닌 특수 화면(제작대/모루/마법부여대 등)은 슬롯 개수 공식만으로는 상자류와
+    // 구분이 안 되니 명시적으로 제외한다 - 안 그러면 이런 화면에서 손에 들고 있던 공용템을
+    // 임시로 슬롯에 올렸다 내리는 것만으로도 가짜 입출고로 잡힐 수 있다.
+    private static final Set<Class<?>> NON_CONTAINER_HANDLERS = Set.of(
+            PlayerScreenHandler.class, CraftingScreenHandler.class, AnvilScreenHandler.class,
+            EnchantmentScreenHandler.class, BeaconScreenHandler.class, LoomScreenHandler.class,
+            StonecutterScreenHandler.class, GrindstoneScreenHandler.class, SmithingScreenHandler.class,
+            CartographyTableScreenHandler.class, MerchantScreenHandler.class
+    );
+
+    /** 이 핸들러가 추적 가능한 컨테이너류(자기 슬롯 + 플레이어 인벤토리 36칸 구조)이면
+     * 자기 슬롯 개수를, 아니면(저장 용도가 아닌 특수 화면) null을 반환한다. */
     public static Integer slotCountFor(ScreenHandler handler) {
-        if (handler instanceof GenericContainerScreenHandler generic) {
-            return generic.getRows() * 9;
+        if (NON_CONTAINER_HANDLERS.contains(handler.getClass())) {
+            return null;
         }
-        if (handler instanceof ShulkerBoxScreenHandler) {
-            return 27;
+        int total = handler.slots.size();
+        int containerSlots = total - PLAYER_INVENTORY_SLOTS;
+        if (containerSlots <= 0) {
+            LOGGER.info("컨테이너로 인식되지 않는 화면 (totalSlots={}, class={})", total, handler.getClass().getName());
+            return null;
         }
-        return null;
+        return containerSlots;
     }
 
     /**
