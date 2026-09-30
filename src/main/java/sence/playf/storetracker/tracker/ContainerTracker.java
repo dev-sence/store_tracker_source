@@ -7,7 +7,10 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.slot.Slot;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -66,6 +69,17 @@ public final class ContainerTracker {
 
     // 클릭 한 번의 전/후 스냅샷을 잠깐 들고 있는 용도 (beforeClick -> afterClick 사이에만 값이 있음).
     private static Map<String, Integer> pendingClickBefore;
+    private static StackInfo pendingCursorBefore;
+    private static Boolean pendingTargetIsContainerSlot;
+
+    // "지금 커서에 들고 있는 아이템이 이 상자에서 집은 것인지"를 클릭 사이사이 계속 들고 있는다.
+    // PICKUP은 "슬롯 -> 커서 -> 슬롯" 두 번의 클릭에 걸쳐 일어나서, 두 번째 클릭(내려놓기) 시점에
+    // 첫 번째 클릭(집기)이 어디서 왔는지 알아야 진짜 입출고인지 상자 안에서의 자리 이동인지 구분된다.
+    private static Boolean cursorFromContainer;
+
+    /** 커서(또는 슬롯)에 들린 아이템 한 종류의 정체와 개수. */
+    private record StackInfo(String id, String name, int count) {
+    }
 
     private static SecureChannel channel;
 
@@ -139,6 +153,7 @@ public final class ContainerTracker {
             activeChest = registered.orElse(null);
             activeDimension = chestDimension;
             activePos = chestPos;
+            cursorFromContainer = null;
 
             long session = ++sessionCounter;
 
@@ -188,67 +203,154 @@ public final class ContainerTracker {
                 activeDimension = null;
                 activePos = null;
                 pendingClickBefore = null;
+                cursorFromContainer = null;
                 onContainerClosed(handler, slotCount, chestLabel, chestDimension, chestPos);
             });
         });
     }
 
-    /** 슬롯 클릭 처리(onMouseClick) 직전에 호출한다 - 지금 상자 슬롯 상태를 기록해둔다. */
-    public static void beforeClick() {
+    private static StackInfo readCursor(ScreenHandler handler) {
+        ItemStack cursor = handler.getCursorStack();
+        if (cursor.isEmpty()) {
+            return null;
+        }
+        return new StackInfo(ContainerSlots.identityKey(cursor), cursor.getName().getString(), cursor.getCount());
+    }
+
+    /** 슬롯 클릭 처리(onMouseClick) 직전에 호출한다 - 지금 상자 슬롯/커서 상태를 기록해둔다. */
+    public static void beforeClick(Slot slot, SlotActionType actionType) {
         ScreenHandler handler = activeHandler;
         Integer slotCount = activeSlotCount;
         if (handler == null || slotCount == null) {
             pendingClickBefore = null;
+            pendingCursorBefore = null;
+            pendingTargetIsContainerSlot = null;
             return;
         }
         pendingClickBefore = ContainerSlots.snapshotCounts(handler, slotCount);
+        pendingCursorBefore = readCursor(handler);
+        pendingTargetIsContainerSlot = slot != null && slot.id < slotCount;
     }
 
     /**
-     * 슬롯 클릭 처리 직후에 호출한다 - beforeClick 이후 이 클릭 한 번으로 상자 슬롯에 생긴 변화만
-     * 계산해서 이벤트로 기록한다. 그 사이에 다른 플레이어가 만든 변화는 여기 포함되지 않는다
-     * (다른 플레이어의 변화는 그 사람 자신의 클라이언트가 자신의 beforeClick/afterClick으로 잡는다).
+     * 슬롯 클릭 처리 직후에 호출한다. PICKUP/QUICK_CRAFT(커서를 거치는 클릭)는 커서 출처 추적으로,
+     * QUICK_MOVE/SWAP처럼 클릭 한 번 안에서 바로 끝나는 액션은 기존 슬롯 스냅샷 비교로 판단한다
+     * (다른 플레이어가 같은 상자에서 동시에 만든 변화는 각자의 클라이언트가 각자 잡으므로 여기 안 섞인다).
      */
-    public static void afterClick() {
+    public static void afterClick(Slot slot, SlotActionType actionType) {
         Map<String, Integer> before = pendingClickBefore;
+        StackInfo cursorBefore = pendingCursorBefore;
+        Boolean targetIsContainerSlot = pendingTargetIsContainerSlot;
         pendingClickBefore = null;
+        pendingCursorBefore = null;
+        pendingTargetIsContainerSlot = null;
 
         ScreenHandler handler = activeHandler;
         Integer slotCount = activeSlotCount;
         ChestRegistry.RegisteredChest chest = activeChest;
         String dimension = activeDimension;
         BlockPos pos = activePos;
-        if (before == null || handler == null || slotCount == null || dimension == null || pos == null) {
+        if (before == null || handler == null || slotCount == null || dimension == null || pos == null
+                || targetIsContainerSlot == null) {
             return;
         }
 
         String chestLabel = chest != null ? chest.label() : null;
         boolean isRegisteredChest = chestLabel != null;
 
+        if (actionType == SlotActionType.PICKUP || actionType == SlotActionType.QUICK_CRAFT) {
+            handleCursorTransition(handler, cursorBefore, targetIsContainerSlot, isRegisteredChest, chestLabel,
+                    dimension, pos);
+            return;
+        }
+
+        // QUICK_MOVE(shift-클릭)/SWAP(숫자키 교환)은 커서를 거치지 않고 클릭 한 번 안에서 바로
+        // "이 인벤토리 <-> 저 인벤토리"로 끝나서, 슬롯 스냅샷 비교만으로 충분하다.
+        //
         // 바닐라 컨테이너 클릭은 "낙관적 예측"이다 - 클라이언트가 클릭 즉시 슬롯을 먼저 바꿔서
         // 보여주고, 서버가 그 이동을 거부하면(귀속템이라 상자에 못 넣는 경우 등) 나중에 정정
-        // 패킷으로 되돌린다. afterClick 시점에 바로 스냅샷을 뜨면 이 "아직 서버가 거부하지 않은
-        // 순간"의 상태만 보게 돼서, 실제로는 거부된 이동을 성공한 입출고로 잘못 기록하는 버그가
-        // 있었다(귀속 아이템을 상자에 넣으려다 막혔는데 로그는 "넣음"으로 찍히고 [공용템] 태그까지
-        // 붙어버린 사례). 몇 틱 기다렸다가 다시 스냅샷을 떠서, 그 사이 서버가 되돌리지 않았는지
-        // 확인한 뒤에야 진짜 변화로 인정한다.
+        // 패킷으로 되돌린다. 그래서 클릭 직후 바로 스냅샷을 뜨지 않고 몇 틱 기다렸다가 다시 떠서,
+        // 그 사이 서버가 되돌리지 않았는지 확인한 뒤에야 진짜 변화로 인정한다.
         ClientDelay.runAfterTicks(4, () -> {
             Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
             Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
             before.keySet().forEach(id -> names.putIfAbsent(id, id));
 
-            sendDetectedChanges(before, after, names, isRegisteredChest, chestLabel, dimension, pos);
+            Set<String> itemIds = new HashSet<>();
+            itemIds.addAll(before.keySet());
+            itemIds.addAll(after.keySet());
+            for (String itemId : itemIds) {
+                int delta = after.getOrDefault(itemId, 0) - before.getOrDefault(itemId, 0);
+                if (delta == 0) {
+                    continue;
+                }
+                String action = delta < 0 ? "TAKE" : "DEPOSIT";
+                fireEvent(action, itemId, names.getOrDefault(itemId, itemId), Math.abs(delta),
+                        isRegisteredChest, chestLabel, dimension, pos);
+            }
         });
     }
 
-    private static void sendDetectedChanges(Map<String, Integer> before, Map<String, Integer> after,
-                                             Map<String, String> names, boolean isRegisteredChest,
-                                             String chestLabel, String dimension, BlockPos pos) {
-        Set<String> itemIds = new HashSet<>();
-        itemIds.addAll(before.keySet());
-        itemIds.addAll(after.keySet());
-        if (itemIds.isEmpty()) {
+    /**
+     * PICKUP/QUICK_CRAFT 클릭 뒤 커서 변화를 본다. 상자 슬롯 <-> 커서 <-> 플레이어 인벤토리로 두 번의
+     * 클릭에 걸쳐 일어나는 이동을, 커서에 든 아이템이 "어디서 왔는지"(cursorFromContainer)를 클릭
+     * 사이사이 기억해뒀다가 판단한다 - 상자 안에서 슬롯만 옮기는 것(자리 정리, 캡처 준비 등)은 커서가
+     * 상자 슬롯에서 나왔다가 다시 상자 슬롯으로 들어가므로 진짜 입출고로 잡히지 않는다.
+     */
+    private static void handleCursorTransition(ScreenHandler handler, StackInfo cursorBefore,
+                                                 boolean targetIsContainerSlot, boolean isRegisteredChest,
+                                                 String chestLabel, String dimension, BlockPos pos) {
+        ClientDelay.runAfterTicks(4, () -> {
+            StackInfo cursorAfter = readCursor(handler);
+
+            // 커서에서 클릭한 슬롯으로 "내려놓인" 양 - 상자 슬롯에 내려놨는데 원래 플레이어 것이었으면
+            // 진짜 DEPOSIT, 플레이어 슬롯에 내려놨는데 원래 상자 것이었으면 진짜 TAKE. 원래 있던 곳과
+            // 같은 쪽으로 다시 들어간 거면(예: 상자 안에서 자리만 옮김) 아무 것도 안 보낸다.
+            if (cursorBefore != null) {
+                int left;
+                if (cursorAfter == null || !cursorAfter.id().equals(cursorBefore.id())) {
+                    left = cursorBefore.count();
+                } else {
+                    left = Math.max(0, cursorBefore.count() - cursorAfter.count());
+                }
+                if (left > 0) {
+                    boolean originWasContainer = Boolean.TRUE.equals(cursorFromContainer);
+                    if (targetIsContainerSlot && !originWasContainer) {
+                        fireEvent("DEPOSIT", cursorBefore.id(), cursorBefore.name(), left,
+                                isRegisteredChest, chestLabel, dimension, pos);
+                    } else if (!targetIsContainerSlot && originWasContainer) {
+                        fireEvent("TAKE", cursorBefore.id(), cursorBefore.name(), left,
+                                isRegisteredChest, chestLabel, dimension, pos);
+                    }
+                }
+            }
+
+            // 이 클릭으로 커서에 새로 실린(또는 늘어난) 몫의 출처를 다음 클릭을 위해 기억해둔다.
+            if (cursorAfter != null) {
+                boolean grewOrChanged = cursorBefore == null
+                        || !cursorBefore.id().equals(cursorAfter.id())
+                        || cursorAfter.count() > cursorBefore.count();
+                if (grewOrChanged) {
+                    cursorFromContainer = targetIsContainerSlot;
+                }
+            } else {
+                cursorFromContainer = null;
+            }
+        });
+    }
+
+    private static void fireEvent(String action, String itemId, String itemName, int count,
+                                   boolean isRegisteredChest, String chestLabel, String dimension, BlockPos pos) {
+        // 경유 상자에서는 내가 지금 보유 중이라고 장부에 있는 아이템만 추적한다.
+        if (!isRegisteredChest && (!FeatureToggles.passthroughTracking() || !HeldItemLedger.isHeld(itemId))) {
             return;
+        }
+
+        LOGGER.info("입출고 감지: action={} item={} count={} registeredChest={}",
+                action, itemName, count, isRegisteredChest);
+        if (isRegisteredChest) {
+            // 서버 응답을 기다리지 않고 즉시 반영 - 체감 지연 없이 바로 [공용템] 표시/차단이 갱신된다.
+            HeldItemLedger.adjustLocal(itemId, action.equals("TAKE") ? count : -count);
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
@@ -256,53 +358,34 @@ public final class ContainerTracker {
         String mapKey = MapKey.current(client);
         String occurredAt = Instant.now().toString();
 
-        for (String itemId : itemIds) {
-            int delta = after.getOrDefault(itemId, 0) - before.getOrDefault(itemId, 0);
-            if (delta == 0) {
-                continue;
-            }
-            // 경유 상자에서는 내가 지금 보유 중이라고 장부에 있는 아이템만 추적한다.
-            if (!isRegisteredChest && (!FeatureToggles.passthroughTracking() || !HeldItemLedger.isHeld(itemId))) {
-                continue;
-            }
-
-            String action = delta < 0 ? "TAKE" : "DEPOSIT";
-            LOGGER.info("입출고 감지: action={} item={} count={} registeredChest={}",
-                    action, names.getOrDefault(itemId, itemId), Math.abs(delta), isRegisteredChest);
-            if (isRegisteredChest) {
-                // 서버 응답을 기다리지 않고 즉시 반영 - 체감 지연 없이 바로 [공용템] 표시/차단이 갱신된다.
-                HeldItemLedger.adjustLocal(itemId, action.equals("TAKE") ? Math.abs(delta) : -Math.abs(delta));
-            }
-
-            JsonObject event = new JsonObject();
-            event.addProperty("username", username);
-            event.addProperty("item_id", itemId);
-            event.addProperty("item_name", names.getOrDefault(itemId, itemId));
-            event.addProperty("action", action);
-            event.addProperty("count", Math.abs(delta));
-            event.addProperty("occurred_at", occurredAt);
-            event.addProperty("map_key", mapKey);
-            if (chestLabel != null) {
-                event.addProperty("chest_label", chestLabel);
-            }
-            JsonObject position = new JsonObject();
-            position.addProperty("dimension", dimension);
-            position.addProperty("x", pos.getX());
-            position.addProperty("y", pos.getY());
-            position.addProperty("z", pos.getZ());
-            event.add("position", position);
-
-            Async.run(() -> {
-                LocalLogger.log(event);
-                if (MemberGate.isAuthorized()) {
-                    ApiClient.Result result = ApiClient.postEncrypted(
-                            BuildInfo.API_BASE_URL, "/api/log-event", channel(), event);
-                    if (result.statusCode() != 202) {
-                        LOGGER.warn("이벤트 전송 실패 (status={})", result.statusCode());
-                    }
-                }
-            });
+        JsonObject event = new JsonObject();
+        event.addProperty("username", username);
+        event.addProperty("item_id", itemId);
+        event.addProperty("item_name", itemName);
+        event.addProperty("action", action);
+        event.addProperty("count", count);
+        event.addProperty("occurred_at", occurredAt);
+        event.addProperty("map_key", mapKey);
+        if (chestLabel != null) {
+            event.addProperty("chest_label", chestLabel);
         }
+        JsonObject position = new JsonObject();
+        position.addProperty("dimension", dimension);
+        position.addProperty("x", pos.getX());
+        position.addProperty("y", pos.getY());
+        position.addProperty("z", pos.getZ());
+        event.add("position", position);
+
+        Async.run(() -> {
+            LocalLogger.log(event);
+            if (MemberGate.isAuthorized()) {
+                ApiClient.Result result = ApiClient.postEncrypted(
+                        BuildInfo.API_BASE_URL, "/api/log-event", channel(), event);
+                if (result.statusCode() != 202) {
+                    LOGGER.warn("이벤트 전송 실패 (status={})", result.statusCode());
+                }
+            }
+        });
     }
 
     /** 상자가 닫힐 때의 전체 내용물 스냅샷을 개발자 로그용으로 서버에 보낸다 (감사용, 입출고 감지와는 무관). */

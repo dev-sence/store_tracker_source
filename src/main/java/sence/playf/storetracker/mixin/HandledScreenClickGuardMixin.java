@@ -32,7 +32,7 @@ public abstract class HandledScreenClickGuardMixin {
             ci.cancel();
             return;
         }
-        ContainerTracker.beforeClick();
+        ContainerTracker.beforeClick(slot, actionType);
     }
 
     @Inject(
@@ -41,6 +41,6 @@ public abstract class HandledScreenClickGuardMixin {
     )
     private void sence_storetracker$trackClick(Slot slot, int slotId, int button, SlotActionType actionType,
                                                 CallbackInfo ci) {
-        ContainerTracker.afterClick();
+        ContainerTracker.afterClick(slot, actionType);
     }
 }
