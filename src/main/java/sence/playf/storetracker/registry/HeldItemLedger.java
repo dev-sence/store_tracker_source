@@ -30,10 +30,20 @@ public final class HeldItemLedger {
             return;
         }
 
-        Map<String, Integer> parsed = new ConcurrentHashMap<>();
+        // 상자를 다시 열기만 해도(UseBlockCallback) 매번 이 fetch가 도는데, 방금 한 TAKE/DEPOSIT의
+        // /api/log-event 전송이 아직 서버에 커밋되기 전에 이 GET이 먼저 응답을 받아버리면, 서버가
+        // 돌려준 "아직 반영 안 된(오래된)" 값으로 방금 adjustLocal()이 올려둔 최신 로컬 값을
+        // 덮어써버리는 경쟁 상태가 있었다 - 그러면 실제로는 7개를 꺼냈는데 장부가 순간적으로 3개로
+        // 되돌아가서, "개인템 차단"이 진짜로 가진 개수보다 적게 넣을 수 있다고 잘못 막아버렸다.
+        // 그래서 서버 값을 그대로 덮어쓰지 않고, 지금 로컬에 있는 값과 비교해서 더 큰 쪽을 쓴다 -
+        // 로컬이 서버보다 앞서 있으면(막 낙관적으로 반영한 직후) 그 값을 유지하고, 서버가 로컬보다
+        // 최신이면(다른 곳에서 갱신됐거나 관리자가 직접 고침) 서버 값을 그대로 따른다.
+        Map<String, Integer> parsed = new ConcurrentHashMap<>(counts);
         for (JsonElement element : result.bodyAsJson().getAsJsonArray()) {
             JsonObject obj = element.getAsJsonObject();
-            parsed.put(obj.get("item_id").getAsString(), obj.get("held_count").getAsInt());
+            String itemId = obj.get("item_id").getAsString();
+            int serverCount = obj.get("held_count").getAsInt();
+            parsed.put(itemId, Math.max(serverCount, parsed.getOrDefault(itemId, 0)));
         }
         counts = parsed;
     }
