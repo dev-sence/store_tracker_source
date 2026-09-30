@@ -282,99 +282,100 @@ public final class ContainerTracker {
         }
 
         // QUICK_MOVE(shift-클릭)/SWAP(숫자키 교환)은 커서를 거치지 않고 클릭 한 번 안에서 바로
-        // "이 인벤토리 <-> 저 인벤토리"로 끝나서, 슬롯 스냅샷 비교만으로 충분하다.
-        //
-        // 바닐라 컨테이너 클릭은 "낙관적 예측"이다 - 클라이언트가 클릭 즉시 슬롯을 먼저 바꿔서
-        // 보여주고, 서버가 그 이동을 거부하면(귀속템이라 상자에 못 넣는 경우 등) 나중에 정정
-        // 패킷으로 되돌린다. 그래서 클릭 직후 바로 스냅샷을 뜨지 않고 몇 틱 기다렸다가 다시 떠서,
-        // 그 사이 서버가 되돌리지 않았는지 확인한 뒤에야 진짜 변화로 인정한다.
-        ClientDelay.runAfterTicks(4, () -> {
-            Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
-            Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
-            before.keySet().forEach(id -> names.putIfAbsent(id, id));
+        // "이 인벤토리 <-> 저 인벤토리"로 끝난다. 클릭 직후 바로(동기적으로) 스냅샷을 떠서 비교한다 -
+        // 예전엔 몇 틱 기다렸다가 다시 스냅샷을 떠서 서버가 되돌리지 않았는지 확인했었는데(귀속템
+        // 등 서버가 거부하는 이동을 성공으로 잘못 기록하는 걸 막으려고), 빠르게 연속으로 여러 번
+        // 클릭하면(나눠서 꺼냈다 넣었다 하는 정상적인 사용 패턴 포함) 그 "몇 틱 뒤"에 재는 스냅샷이
+        // 그 사이 끼어든 "다른" 클릭의 결과까지 섞어서 봐버려 아예 아무 것도 기록 안 되는 더 심각한
+        // 문제가 있었다. 흔치 않은 귀속템 오탐(v1.0.13이 막던 것)보다 흔한 빠른 클릭에서 추적이
+        // 통째로 깨지는 쪽이 훨씬 나쁜 문제라 동기 방식으로 되돌린다.
+        Map<String, Integer> after = ContainerSlots.snapshotCounts(handler, slotCount);
+        Map<String, String> names = ContainerSlots.snapshotNames(handler, slotCount);
+        before.keySet().forEach(id -> names.putIfAbsent(id, id));
 
-            Set<String> itemIds = new HashSet<>();
-            itemIds.addAll(before.keySet());
-            itemIds.addAll(after.keySet());
-            for (String itemId : itemIds) {
-                int delta = after.getOrDefault(itemId, 0) - before.getOrDefault(itemId, 0);
-                if (delta == 0) {
-                    continue;
-                }
-                String action = delta < 0 ? "TAKE" : "DEPOSIT";
-                fireEvent(action, itemId, names.getOrDefault(itemId, itemId), Math.abs(delta),
-                        isRegisteredChest, chestLabel, dimension, pos);
+        Set<String> itemIds = new HashSet<>();
+        itemIds.addAll(before.keySet());
+        itemIds.addAll(after.keySet());
+        for (String itemId : itemIds) {
+            int delta = after.getOrDefault(itemId, 0) - before.getOrDefault(itemId, 0);
+            if (delta == 0) {
+                continue;
             }
-        });
+            String action = delta < 0 ? "TAKE" : "DEPOSIT";
+            fireEvent(action, itemId, names.getOrDefault(itemId, itemId), Math.abs(delta),
+                    isRegisteredChest, chestLabel, dimension, pos);
+        }
     }
 
     /**
-     * PICKUP/QUICK_CRAFT 클릭 뒤 커서 변화를 본다. 더블클릭으로 "같은 아이템 다 모으기"를 하면
-     * 상자 슬롯과 플레이어 인벤토리 슬롯에서 동시에(한 클릭 안에서) 섞여서 커서로 모일 수 있어서,
-     * 단순히 "이번에 클릭한 슬롯이 상자냐 아니냐"만으로는 안 되고, 상자 쪽 슬롯 합계와 플레이어
-     * 쪽 슬롯 합계를 각각 따로 비교해서 "이번 클릭으로 상자에서 몇 개, 플레이어 쪽에서 몇 개가
-     * 커서로 왔는지"를 계산한다. 커서에 쌓인 개수 중 상자 출신 개수(cursorFromContainerCount)를
-     * 계속 들고 있다가, 나중에 그 커서 내용물이 내려질 때 그 출처 비율대로 진짜 TAKE/DEPOSIT을
-     * 판정한다 - 상자 안에서 자리만 옮기는 것(캡처 준비 등)은 상자 출신이 다시 상자로 들어가므로
-     * 여전히 아무 것도 안 보낸다.
+     * PICKUP/QUICK_CRAFT 클릭 뒤 커서 변화를 본다. 클릭 직후 바로(동기적으로) 계산한다 - 몇 틱
+     * 기다렸다가 다시 스냅샷을 뜨면, 그 사이에 낀 "다음" 클릭까지 같이 관찰해버려서 빠르게 연속
+     * 클릭할 때(나눠서 꺼냈다 넣었다 하는 정상적인 사용 패턴 포함) 클릭끼리 서로의 스냅샷을 오염시켜
+     * 아예 아무 것도 기록 안 되는 문제가 있었다.
+     *
+     * 더블클릭으로 "같은 아이템 다 모으기"를 하면 상자 슬롯과 플레이어 인벤토리 슬롯에서 동시에
+     * (한 클릭 안에서) 섞여서 커서로 모일 수 있어서, 단순히 "이번에 클릭한 슬롯이 상자냐 아니냐"만
+     * 으로는 안 되고, 상자 쪽 슬롯 합계와 플레이어 쪽 슬롯 합계를 각각 따로 비교해서 "이번 클릭으로
+     * 상자에서 몇 개, 플레이어 쪽에서 몇 개가 커서로 왔는지"를 계산한다. 커서에 쌓인 개수 중 상자
+     * 출신 개수(cursorFromContainerCount)를 계속 들고 있다가, 나중에 그 커서 내용물이 내려질 때
+     * 그 출처 비율대로 진짜 TAKE/DEPOSIT을 판정한다 - 상자 안에서 자리만 옮기는 것(캡처 준비 등)은
+     * 상자 출신이 다시 상자로 들어가므로 여전히 아무 것도 안 보낸다.
      */
     private static void handleCursorTransition(ScreenHandler handler, int slotCount,
                                                  Map<String, Integer> containerBefore,
                                                  Map<String, Integer> playerBefore, StackInfo cursorBefore,
                                                  boolean isRegisteredChest, String chestLabel,
                                                  String dimension, BlockPos pos) {
-        ClientDelay.runAfterTicks(4, () -> {
-            StackInfo cursorAfter = readCursor(handler);
-            String itemId = cursorBefore != null ? cursorBefore.id() : (cursorAfter != null ? cursorAfter.id() : null);
-            String itemName = cursorBefore != null ? cursorBefore.name() : (cursorAfter != null ? cursorAfter.name() : null);
-            if (itemId == null) {
-                return;
+        StackInfo cursorAfter = readCursor(handler);
+        String itemId = cursorBefore != null ? cursorBefore.id() : (cursorAfter != null ? cursorAfter.id() : null);
+        String itemName = cursorBefore != null ? cursorBefore.name() : (cursorAfter != null ? cursorAfter.name() : null);
+        if (itemId == null) {
+            return;
+        }
+
+        Map<String, Integer> containerAfter = ContainerSlots.snapshotCounts(handler, 0, slotCount);
+        Map<String, Integer> playerAfter = ContainerSlots.snapshotCounts(
+                handler, slotCount, slotCount + ContainerSlots.PLAYER_INVENTORY_SLOTS);
+
+        int containerDelta = containerBefore.getOrDefault(itemId, 0) - containerAfter.getOrDefault(itemId, 0);
+        int playerDelta = playerBefore.getOrDefault(itemId, 0) - playerAfter.getOrDefault(itemId, 0);
+        int arrivedFromContainer = Math.max(0, containerDelta); // 상자 슬롯에서 줄어든 만큼 = 커서로 옴
+        int arrivedFromPlayer = Math.max(0, playerDelta);       // 플레이어 슬롯에서 줄어든 만큼 = 커서로 옴
+        int placedIntoContainer = Math.max(0, -containerDelta); // 상자 슬롯이 늘어난 만큼 = 커서에서 내려짐
+        int placedIntoPlayer = Math.max(0, -playerDelta);       // 플레이어 슬롯이 늘어난 만큼 = 커서에서 내려짐
+
+        if (!itemId.equals(cursorItemId)) {
+            cursorItemId = itemId;
+            cursorFromContainerCount = 0;
+        }
+        cursorFromContainerCount += arrivedFromContainer;
+
+        int totalPlaced = placedIntoContainer + placedIntoPlayer;
+        if (totalPlaced > 0) {
+            int fromContainerPortion = Math.min(cursorFromContainerCount, totalPlaced);
+            int fromPlayerPortion = totalPlaced - fromContainerPortion;
+
+            // 상자 출신이 플레이어 슬롯에 내려간 만큼만 진짜 TAKE, 플레이어 출신이 상자 슬롯에
+            // 내려간 만큼만 진짜 DEPOSIT - 같은 쪽으로 다시 들어간 몫은 세지 않는다.
+            int takeAmount = Math.min(fromContainerPortion, placedIntoPlayer);
+            int depositAmount = Math.min(fromPlayerPortion, placedIntoContainer);
+
+            if (takeAmount > 0) {
+                fireEvent("TAKE", itemId, itemName, takeAmount, isRegisteredChest, chestLabel, dimension, pos);
+            }
+            if (depositAmount > 0) {
+                fireEvent("DEPOSIT", itemId, itemName, depositAmount, isRegisteredChest, chestLabel, dimension, pos);
             }
 
-            Map<String, Integer> containerAfter = ContainerSlots.snapshotCounts(handler, 0, slotCount);
-            Map<String, Integer> playerAfter = ContainerSlots.snapshotCounts(
-                    handler, slotCount, slotCount + ContainerSlots.PLAYER_INVENTORY_SLOTS);
+            cursorFromContainerCount = Math.max(0, cursorFromContainerCount - fromContainerPortion);
+        }
 
-            int containerDelta = containerBefore.getOrDefault(itemId, 0) - containerAfter.getOrDefault(itemId, 0);
-            int playerDelta = playerBefore.getOrDefault(itemId, 0) - playerAfter.getOrDefault(itemId, 0);
-            int arrivedFromContainer = Math.max(0, containerDelta); // 상자 슬롯에서 줄어든 만큼 = 커서로 옴
-            int arrivedFromPlayer = Math.max(0, playerDelta);       // 플레이어 슬롯에서 줄어든 만큼 = 커서로 옴
-            int placedIntoContainer = Math.max(0, -containerDelta); // 상자 슬롯이 늘어난 만큼 = 커서에서 내려짐
-            int placedIntoPlayer = Math.max(0, -playerDelta);       // 플레이어 슬롯이 늘어난 만큼 = 커서에서 내려짐
-
-            if (!itemId.equals(cursorItemId)) {
-                cursorItemId = itemId;
-                cursorFromContainerCount = 0;
-            }
-            cursorFromContainerCount += arrivedFromContainer;
-
-            int totalPlaced = placedIntoContainer + placedIntoPlayer;
-            if (totalPlaced > 0) {
-                int fromContainerPortion = Math.min(cursorFromContainerCount, totalPlaced);
-                int fromPlayerPortion = totalPlaced - fromContainerPortion;
-
-                // 상자 출신이 플레이어 슬롯에 내려간 만큼만 진짜 TAKE, 플레이어 출신이 상자 슬롯에
-                // 내려간 만큼만 진짜 DEPOSIT - 같은 쪽으로 다시 들어간 몫은 세지 않는다.
-                int takeAmount = Math.min(fromContainerPortion, placedIntoPlayer);
-                int depositAmount = Math.min(fromPlayerPortion, placedIntoContainer);
-
-                if (takeAmount > 0) {
-                    fireEvent("TAKE", itemId, itemName, takeAmount, isRegisteredChest, chestLabel, dimension, pos);
-                }
-                if (depositAmount > 0) {
-                    fireEvent("DEPOSIT", itemId, itemName, depositAmount, isRegisteredChest, chestLabel, dimension, pos);
-                }
-
-                cursorFromContainerCount = Math.max(0, cursorFromContainerCount - fromContainerPortion);
-            }
-
-            int cursorTotal = cursorAfter != null ? cursorAfter.count() : 0;
-            cursorFromContainerCount = Math.min(cursorFromContainerCount, cursorTotal);
-            if (cursorTotal == 0) {
-                cursorItemId = null;
-                cursorFromContainerCount = 0;
-            }
-        });
+        int cursorTotal = cursorAfter != null ? cursorAfter.count() : 0;
+        cursorFromContainerCount = Math.min(cursorFromContainerCount, cursorTotal);
+        if (cursorTotal == 0) {
+            cursorItemId = null;
+            cursorFromContainerCount = 0;
+        }
     }
 
     private static void fireEvent(String action, String itemId, String itemName, int count,
