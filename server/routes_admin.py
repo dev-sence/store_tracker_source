@@ -96,6 +96,40 @@ def rename_map_key():
     return jsonify({"status": "ok", "from": from_key, "to": to_key, "moved": result})
 
 
+@admin_bp.post("/held-items/set")
+@require_admin
+def set_held_item():
+    """특정 유저의 보유 장부(PlayerItemLedger)를 절대값으로 직접 맞춘다 - "재고 수동 수정"의
+    보유 쪽 버전. 재고(ChestInventoryItem)는 건드리지 않는다 - 실제로 상자 밖에서 들고 있는
+    개수를 알고 있을 때(빠른 테스트로 장부가 꼬였을 때 등) 바로잡는 용도."""
+    data = request.get_json(silent=True) or {}
+    map_key = (data.get("map_key") or "").strip()
+    username = (data.get("username") or "").strip()
+    item_id = data.get("item_id")
+    try:
+        count = int(data.get("count"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid count"}), 400
+    if not map_key or not username or not item_id or count < 0:
+        return jsonify({"error": "invalid request"}), 400
+
+    member = Member.query.filter(db.func.lower(Member.minecraft_username) == username.lower()).first()
+    if member is None:
+        return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
+    username = member.minecraft_username
+
+    row = PlayerItemLedger.query.filter_by(
+        map_key=map_key, minecraft_username=username, item_id=item_id,
+    ).first()
+    if row is None:
+        row = PlayerItemLedger(map_key=map_key, minecraft_username=username, item_id=item_id, held_count=count)
+        db.session.add(row)
+    else:
+        row.held_count = count
+    db.session.commit()
+    return jsonify({"status": "ok", "username": username, "item_id": item_id, "held_count": row.held_count})
+
+
 @admin_bp.get("/request-logs")
 @require_admin
 def list_request_logs():
