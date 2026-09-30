@@ -33,7 +33,7 @@ public final class ContainerSlots {
     // 이 관례를 따른다). 예전엔 GenericContainerScreenHandler/ShulkerBoxScreenHandler
     // 두 클래스만 알아봐서, 서버가 다른 방식으로 상자 GUI를 구현하면(커스텀 플러그인 메뉴 등)
     // 여기서 조용히 null을 반환해 추적이 통째로 멈추는 문제가 있었다.
-    private static final int PLAYER_INVENTORY_SLOTS = 36;
+    public static final int PLAYER_INVENTORY_SLOTS = 36;
 
     // 저장 용도가 아닌 특수 화면(제작대/모루/마법부여대 등)은 슬롯 개수 공식만으로는 상자류와
     // 구분이 안 되니 명시적으로 제외한다 - 안 그러면 이런 화면에서 손에 들고 있던 공용템을
@@ -83,8 +83,14 @@ public final class ContainerSlots {
     }
 
     public static Map<String, Integer> snapshotCounts(ScreenHandler handler, int slotCount) {
+        return snapshotCounts(handler, 0, slotCount);
+    }
+
+    /** 더블클릭으로 "같은 아이템 다 모으기"를 하면 상자 슬롯과 플레이어 인벤토리 슬롯에서
+     * 동시에 커서로 모인다 - 어느 쪽에서 얼마나 왔는지 구분하려면 두 범위를 따로 스냅샷해야 한다. */
+    public static Map<String, Integer> snapshotCounts(ScreenHandler handler, int start, int end) {
         Map<String, Integer> counts = new HashMap<>();
-        for (int i = 0; i < slotCount; i++) {
+        for (int i = start; i < end; i++) {
             ItemStack stack = handler.getSlot(i).getStack();
             if (stack.isEmpty()) {
                 continue;

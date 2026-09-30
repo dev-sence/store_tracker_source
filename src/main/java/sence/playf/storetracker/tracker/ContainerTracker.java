@@ -69,13 +69,19 @@ public final class ContainerTracker {
 
     // 클릭 한 번의 전/후 스냅샷을 잠깐 들고 있는 용도 (beforeClick -> afterClick 사이에만 값이 있음).
     private static Map<String, Integer> pendingClickBefore;
+    private static Map<String, Integer> pendingContainerBefore;
+    private static Map<String, Integer> pendingPlayerBefore;
     private static StackInfo pendingCursorBefore;
     private static Boolean pendingTargetIsContainerSlot;
 
-    // "지금 커서에 들고 있는 아이템이 이 상자에서 집은 것인지"를 클릭 사이사이 계속 들고 있는다.
-    // PICKUP은 "슬롯 -> 커서 -> 슬롯" 두 번의 클릭에 걸쳐 일어나서, 두 번째 클릭(내려놓기) 시점에
-    // 첫 번째 클릭(집기)이 어디서 왔는지 알아야 진짜 입출고인지 상자 안에서의 자리 이동인지 구분된다.
-    private static Boolean cursorFromContainer;
+    // "지금 커서에 들고 있는 아이템 중 몇 개가 이 상자에서 온 것인지"를 클릭 사이사이 계속 들고 있는다.
+    // PICKUP은 "슬롯 -> 커서 -> 슬롯" 여러 번의 클릭에 걸쳐 일어나고(더블클릭으로 "같은 아이템 다
+    // 모으기"를 하면 상자 슬롯과 플레이어 인벤토리 슬롯에서 동시에 섞여서 커서로 모이기도 한다),
+    // 내려놓는 시점에 지금 커서에 든 것 중 상자 출신이 몇 개인지 알아야 진짜 입출고 개수를 정확히
+    // 계산할 수 있다 - 단순히 "마지막으로 클릭한 슬롯이 어디였냐"만으로는 모아잡기의 섞인 출처를
+    // 구분 못 해서, 상자에서 하나도 안 온 걸 전부 TAKE로 잘못 세는 문제가 있었다.
+    private static String cursorItemId;
+    private static int cursorFromContainerCount;
 
     /** 커서(또는 슬롯)에 들린 아이템 한 종류의 정체와 개수. */
     private record StackInfo(String id, String name, int count) {
@@ -153,7 +159,8 @@ public final class ContainerTracker {
             activeChest = registered.orElse(null);
             activeDimension = chestDimension;
             activePos = chestPos;
-            cursorFromContainer = null;
+            cursorItemId = null;
+            cursorFromContainerCount = 0;
 
             long session = ++sessionCounter;
 
@@ -203,7 +210,8 @@ public final class ContainerTracker {
                 activeDimension = null;
                 activePos = null;
                 pendingClickBefore = null;
-                cursorFromContainer = null;
+                cursorItemId = null;
+                cursorFromContainerCount = 0;
                 onContainerClosed(handler, slotCount, chestLabel, chestDimension, chestPos);
             });
         });
@@ -217,17 +225,22 @@ public final class ContainerTracker {
         return new StackInfo(ContainerSlots.identityKey(cursor), cursor.getName().getString(), cursor.getCount());
     }
 
-    /** 슬롯 클릭 처리(onMouseClick) 직전에 호출한다 - 지금 상자 슬롯/커서 상태를 기록해둔다. */
+    /** 슬롯 클릭 처리(onMouseClick) 직전에 호출한다 - 지금 상자/플레이어 인벤토리/커서 상태를 기록해둔다. */
     public static void beforeClick(Slot slot, SlotActionType actionType) {
         ScreenHandler handler = activeHandler;
         Integer slotCount = activeSlotCount;
         if (handler == null || slotCount == null) {
             pendingClickBefore = null;
+            pendingContainerBefore = null;
+            pendingPlayerBefore = null;
             pendingCursorBefore = null;
             pendingTargetIsContainerSlot = null;
             return;
         }
         pendingClickBefore = ContainerSlots.snapshotCounts(handler, slotCount);
+        pendingContainerBefore = pendingClickBefore;
+        pendingPlayerBefore = ContainerSlots.snapshotCounts(
+                handler, slotCount, slotCount + ContainerSlots.PLAYER_INVENTORY_SLOTS);
         pendingCursorBefore = readCursor(handler);
         pendingTargetIsContainerSlot = slot != null && slot.id < slotCount;
     }
@@ -239,9 +252,13 @@ public final class ContainerTracker {
      */
     public static void afterClick(Slot slot, SlotActionType actionType) {
         Map<String, Integer> before = pendingClickBefore;
+        Map<String, Integer> containerBefore = pendingContainerBefore;
+        Map<String, Integer> playerBefore = pendingPlayerBefore;
         StackInfo cursorBefore = pendingCursorBefore;
         Boolean targetIsContainerSlot = pendingTargetIsContainerSlot;
         pendingClickBefore = null;
+        pendingContainerBefore = null;
+        pendingPlayerBefore = null;
         pendingCursorBefore = null;
         pendingTargetIsContainerSlot = null;
 
@@ -259,8 +276,8 @@ public final class ContainerTracker {
         boolean isRegisteredChest = chestLabel != null;
 
         if (actionType == SlotActionType.PICKUP || actionType == SlotActionType.QUICK_CRAFT) {
-            handleCursorTransition(handler, cursorBefore, targetIsContainerSlot, isRegisteredChest, chestLabel,
-                    dimension, pos);
+            handleCursorTransition(handler, slotCount, containerBefore, playerBefore, cursorBefore,
+                    isRegisteredChest, chestLabel, dimension, pos);
             return;
         }
 
@@ -292,49 +309,70 @@ public final class ContainerTracker {
     }
 
     /**
-     * PICKUP/QUICK_CRAFT 클릭 뒤 커서 변화를 본다. 상자 슬롯 <-> 커서 <-> 플레이어 인벤토리로 두 번의
-     * 클릭에 걸쳐 일어나는 이동을, 커서에 든 아이템이 "어디서 왔는지"(cursorFromContainer)를 클릭
-     * 사이사이 기억해뒀다가 판단한다 - 상자 안에서 슬롯만 옮기는 것(자리 정리, 캡처 준비 등)은 커서가
-     * 상자 슬롯에서 나왔다가 다시 상자 슬롯으로 들어가므로 진짜 입출고로 잡히지 않는다.
+     * PICKUP/QUICK_CRAFT 클릭 뒤 커서 변화를 본다. 더블클릭으로 "같은 아이템 다 모으기"를 하면
+     * 상자 슬롯과 플레이어 인벤토리 슬롯에서 동시에(한 클릭 안에서) 섞여서 커서로 모일 수 있어서,
+     * 단순히 "이번에 클릭한 슬롯이 상자냐 아니냐"만으로는 안 되고, 상자 쪽 슬롯 합계와 플레이어
+     * 쪽 슬롯 합계를 각각 따로 비교해서 "이번 클릭으로 상자에서 몇 개, 플레이어 쪽에서 몇 개가
+     * 커서로 왔는지"를 계산한다. 커서에 쌓인 개수 중 상자 출신 개수(cursorFromContainerCount)를
+     * 계속 들고 있다가, 나중에 그 커서 내용물이 내려질 때 그 출처 비율대로 진짜 TAKE/DEPOSIT을
+     * 판정한다 - 상자 안에서 자리만 옮기는 것(캡처 준비 등)은 상자 출신이 다시 상자로 들어가므로
+     * 여전히 아무 것도 안 보낸다.
      */
-    private static void handleCursorTransition(ScreenHandler handler, StackInfo cursorBefore,
-                                                 boolean targetIsContainerSlot, boolean isRegisteredChest,
-                                                 String chestLabel, String dimension, BlockPos pos) {
+    private static void handleCursorTransition(ScreenHandler handler, int slotCount,
+                                                 Map<String, Integer> containerBefore,
+                                                 Map<String, Integer> playerBefore, StackInfo cursorBefore,
+                                                 boolean isRegisteredChest, String chestLabel,
+                                                 String dimension, BlockPos pos) {
         ClientDelay.runAfterTicks(4, () -> {
             StackInfo cursorAfter = readCursor(handler);
-
-            // 커서에서 클릭한 슬롯으로 "내려놓인" 양 - 상자 슬롯에 내려놨는데 원래 플레이어 것이었으면
-            // 진짜 DEPOSIT, 플레이어 슬롯에 내려놨는데 원래 상자 것이었으면 진짜 TAKE. 원래 있던 곳과
-            // 같은 쪽으로 다시 들어간 거면(예: 상자 안에서 자리만 옮김) 아무 것도 안 보낸다.
-            if (cursorBefore != null) {
-                int left;
-                if (cursorAfter == null || !cursorAfter.id().equals(cursorBefore.id())) {
-                    left = cursorBefore.count();
-                } else {
-                    left = Math.max(0, cursorBefore.count() - cursorAfter.count());
-                }
-                if (left > 0) {
-                    boolean originWasContainer = Boolean.TRUE.equals(cursorFromContainer);
-                    if (targetIsContainerSlot && !originWasContainer) {
-                        fireEvent("DEPOSIT", cursorBefore.id(), cursorBefore.name(), left,
-                                isRegisteredChest, chestLabel, dimension, pos);
-                    } else if (!targetIsContainerSlot && originWasContainer) {
-                        fireEvent("TAKE", cursorBefore.id(), cursorBefore.name(), left,
-                                isRegisteredChest, chestLabel, dimension, pos);
-                    }
-                }
+            String itemId = cursorBefore != null ? cursorBefore.id() : (cursorAfter != null ? cursorAfter.id() : null);
+            String itemName = cursorBefore != null ? cursorBefore.name() : (cursorAfter != null ? cursorAfter.name() : null);
+            if (itemId == null) {
+                return;
             }
 
-            // 이 클릭으로 커서에 새로 실린(또는 늘어난) 몫의 출처를 다음 클릭을 위해 기억해둔다.
-            if (cursorAfter != null) {
-                boolean grewOrChanged = cursorBefore == null
-                        || !cursorBefore.id().equals(cursorAfter.id())
-                        || cursorAfter.count() > cursorBefore.count();
-                if (grewOrChanged) {
-                    cursorFromContainer = targetIsContainerSlot;
+            Map<String, Integer> containerAfter = ContainerSlots.snapshotCounts(handler, 0, slotCount);
+            Map<String, Integer> playerAfter = ContainerSlots.snapshotCounts(
+                    handler, slotCount, slotCount + ContainerSlots.PLAYER_INVENTORY_SLOTS);
+
+            int containerDelta = containerBefore.getOrDefault(itemId, 0) - containerAfter.getOrDefault(itemId, 0);
+            int playerDelta = playerBefore.getOrDefault(itemId, 0) - playerAfter.getOrDefault(itemId, 0);
+            int arrivedFromContainer = Math.max(0, containerDelta); // 상자 슬롯에서 줄어든 만큼 = 커서로 옴
+            int arrivedFromPlayer = Math.max(0, playerDelta);       // 플레이어 슬롯에서 줄어든 만큼 = 커서로 옴
+            int placedIntoContainer = Math.max(0, -containerDelta); // 상자 슬롯이 늘어난 만큼 = 커서에서 내려짐
+            int placedIntoPlayer = Math.max(0, -playerDelta);       // 플레이어 슬롯이 늘어난 만큼 = 커서에서 내려짐
+
+            if (!itemId.equals(cursorItemId)) {
+                cursorItemId = itemId;
+                cursorFromContainerCount = 0;
+            }
+            cursorFromContainerCount += arrivedFromContainer;
+
+            int totalPlaced = placedIntoContainer + placedIntoPlayer;
+            if (totalPlaced > 0) {
+                int fromContainerPortion = Math.min(cursorFromContainerCount, totalPlaced);
+                int fromPlayerPortion = totalPlaced - fromContainerPortion;
+
+                // 상자 출신이 플레이어 슬롯에 내려간 만큼만 진짜 TAKE, 플레이어 출신이 상자 슬롯에
+                // 내려간 만큼만 진짜 DEPOSIT - 같은 쪽으로 다시 들어간 몫은 세지 않는다.
+                int takeAmount = Math.min(fromContainerPortion, placedIntoPlayer);
+                int depositAmount = Math.min(fromPlayerPortion, placedIntoContainer);
+
+                if (takeAmount > 0) {
+                    fireEvent("TAKE", itemId, itemName, takeAmount, isRegisteredChest, chestLabel, dimension, pos);
                 }
-            } else {
-                cursorFromContainer = null;
+                if (depositAmount > 0) {
+                    fireEvent("DEPOSIT", itemId, itemName, depositAmount, isRegisteredChest, chestLabel, dimension, pos);
+                }
+
+                cursorFromContainerCount = Math.max(0, cursorFromContainerCount - fromContainerPortion);
+            }
+
+            int cursorTotal = cursorAfter != null ? cursorAfter.count() : 0;
+            cursorFromContainerCount = Math.min(cursorFromContainerCount, cursorTotal);
+            if (cursorTotal == 0) {
+                cursorItemId = null;
+                cursorFromContainerCount = 0;
             }
         });
     }
