@@ -7,6 +7,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 
 import discord_backoff
 import discord_oauth
+from routes_public import _normalize_map_key
 from models import (
     ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger, PublicItemType,
     RequestLog, TrackedChest, db,
@@ -238,7 +239,8 @@ def index():
         row[0] for row in db.session.query(TrackedChest.map_key).distinct()
         if row[0]
     })
-    selected_map = request.args.get("map") or (map_keys[0] if map_keys else "")
+    requested_map = _normalize_map_key(request.args.get("map")) if request.args.get("map") else None
+    selected_map = requested_map or (map_keys[0] if map_keys else "")
     return render_template(
         "dashboard.html",
         map_keys=map_keys,
@@ -333,14 +335,14 @@ def _dashboard_data(map_key: str):
 @dashboard_bp.get("/api/dashboard-data")
 @login_required
 def dashboard_data():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     return jsonify(_dashboard_data(map_key))
 
 
 @dashboard_bp.get("/api/admin/feature-toggles")
 @developer_required
 def admin_get_feature_toggles():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
     toggle = FeatureToggle.query.filter_by(map_key=map_key).first()
@@ -353,7 +355,7 @@ def admin_get_feature_toggles():
 @developer_required
 def admin_toggle_feature():
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     key = data.get("key")
     if not map_key or key not in TOGGLE_KEYS:
         return jsonify({"error": "invalid request"}), 400
@@ -377,7 +379,7 @@ def admin_toggle_feature():
 @developer_required
 def admin_get_chest_strict():
     """등록된 상자의 "개인템 차단"(strict_mode) 상태 - 인게임 개발자 빌드의 상자 안 버튼과 같은 값이다."""
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
     chest = TrackedChest.query.filter_by(map_key=map_key).first()
@@ -390,7 +392,7 @@ def admin_get_chest_strict():
 @developer_required
 def admin_toggle_chest_strict():
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     if not map_key:
         return jsonify({"error": "map_key is required"}), 400
     chest = TrackedChest.query.filter_by(map_key=map_key).first()
@@ -404,7 +406,7 @@ def admin_toggle_chest_strict():
 @dashboard_bp.get("/api/admin/public-items")
 @developer_required
 def admin_list_public_items():
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     if not map_key:
         return jsonify({"error": "map is required"}), 400
     items = PublicItemType.query.filter_by(map_key=map_key).order_by(PublicItemType.display_name).all()
@@ -417,7 +419,7 @@ def admin_add_public_item():
     """인게임 "현재 아이템 캡처"(전체 재캡처)와 달리, 기존 목록은 그대로 두고 한 종류만 추가한다 -
     아직 상자에 한 번도 안 들어와 본 새 아이템을 미리 공용템으로 등록해두고 싶을 때 쓴다."""
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     item_id = (data.get("item_id") or "").strip()
     display_name = (data.get("display_name") or "").strip() or item_id
     if not map_key or not item_id:
@@ -439,7 +441,7 @@ def admin_remove_public_item():
     """공용템 목록에서 한 종류만 뺀다. item_id에 '#'/':' 같은 문자가 섞여 있어서 URL 경로 대신
     바디로 받는다 (재고/보유 장부는 그대로 - 캡처 목록에서만 빠지고 기존 데이터는 안 건드림)."""
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     item_id = data.get("item_id")
     if not map_key or not item_id:
         return jsonify({"error": "map_key, item_id가 필요합니다"}), 400
@@ -466,7 +468,7 @@ def admin_request_log_for_event(event_id):
 @developer_required
 def admin_chest_logs():
     """상자를 열고 닫을 때마다 남는 전체 내용물 스냅샷 로그 (감사/디버깅용, 입출고 로그와는 별개)."""
-    map_key = request.args.get("map", "")
+    map_key = _normalize_map_key(request.args.get("map", ""))
     limit = min(int(request.args.get("limit", 100)), 300)
     rows = RequestLog.query.filter_by(endpoint="chest-log").order_by(RequestLog.id.desc()).limit(limit * 2).all()
 
@@ -600,7 +602,7 @@ def admin_remove_member(member_id):
 def admin_adjust_inventory():
     """재고 수동 수정 - 실측치 동기화가 아직 못 따라잡았거나 뭔가 어긋났을 때 관리자가 직접 바로잡는다."""
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     item_id = data.get("item_id")
     try:
         count = int(data.get("count"))
@@ -641,7 +643,7 @@ def manual_transfer():
     username = _current_member().minecraft_username
 
     data = request.get_json(silent=True) or {}
-    map_key = data.get("map_key")
+    map_key = _normalize_map_key(data.get("map_key"))
     item_id = data.get("item_id")
     action = data.get("action")
     try:
