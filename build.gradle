@@ -34,8 +34,12 @@ dependencies {
     mappings "net.fabricmc:yarn:${yarnMappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    // Fabric API. This is technically optional, but you probably want it anyway.
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+    // Fabric API를 jar-in-jar로 번들해서, 일반 유저가 Fabric API를 따로 설치하지 않아도
+    // 실행되게 한다 (fabric.mod.json의 "fabric" 의존성이 빠져서 "Incompatible mods found!"로
+    // 실행 자체가 안 되는 문제가 실제로 발생함 - 설치 안내만으로는 해결 안 되는 사람들이 계속 나왔음).
+    // 유저가 Fabric API를 이미 따로 설치해뒀어도, Fabric Loader가 외부 설치본을 우선시하고
+    // 이 번들본은 무시하므로 충돌 없음.
+    include modImplementation("net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}")
 }
 
 // dev 빌드: 기본적으로 실제 라이브 서버를 바라본다 (관리자 명령어로 운영 서버를 직접 관리하기 위함).
