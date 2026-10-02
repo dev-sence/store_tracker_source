@@ -130,6 +130,42 @@ def set_held_item():
     return jsonify({"status": "ok", "username": username, "item_id": item_id, "held_count": row.held_count})
 
 
+@admin_bp.post("/inventory/set")
+@require_admin
+def set_inventory():
+    """등록된 상자의 실제 재고(ChestInventoryItem)를 절대값으로 직접 맞춘다 - "재고 수동 수정"의
+    재고 쪽 버전 (보유 쪽은 /admin/held-items/set). 보유 장부는 건드리지 않는다."""
+    data = request.get_json(silent=True) or {}
+    map_key = (data.get("map_key") or "").strip()
+    item_id = data.get("item_id")
+    try:
+        count = int(data.get("count"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid count"}), 400
+    if not map_key or not item_id or count < 0:
+        return jsonify({"error": "invalid request"}), 400
+
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "등록된 상자가 없습니다"}), 404
+
+    row = ChestInventoryItem.query.filter_by(
+        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
+    ).first()
+    if row is None:
+        catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
+        display_name = catalog_entry.display_name if catalog_entry else item_id
+        row = ChestInventoryItem(
+            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
+            item_id=item_id, display_name=display_name, count=count,
+        )
+        db.session.add(row)
+    else:
+        row.count = count
+    db.session.commit()
+    return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
+
+
 @admin_bp.get("/request-logs")
 @require_admin
 def list_request_logs():
