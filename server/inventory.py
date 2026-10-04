@@ -1,4 +1,4 @@
-from models import ChestInventoryItem, PlayerItemLedger, PublicItemType, db
+from models import ChestInventoryItem, PlayerItemLedger, PublicItemType, UnassignedReturn, db
 
 
 def _catalog(map_key, item_id):
@@ -67,12 +67,31 @@ def deposit(map_key, chest, username, item_id, count):
         return 0, "공용템 최대값이 없음 (캡처 필요)"
     ledger = _ensure_ledger(map_key, username, item_id)
     applied = min(count, ledger.held_count)
-    if applied <= 0:
-        return 0, f"보유 장부에 없음 ({username} 0개, 요청 {count})"
-    ledger.held_count -= applied
-    _sync_stock(map_key, chest, item_id, catalog.display_name, catalog.max_count)
-    anomaly = None if applied == count else f"보유 장부 초과 (요청 {count}, 실제 {applied})"
+    remainder = count - applied
+    if applied:
+        ledger.held_count -= applied
+        _sync_stock(map_key, chest, item_id, catalog.display_name, catalog.max_count)
+    if remainder:
+        db.session.add(UnassignedReturn(
+            map_key=map_key, item_id=item_id, display_name=catalog.display_name,
+            count=remainder, depositor=username,
+        ))
+    anomaly = None if remainder == 0 else f"본인 보유 아님 → 미귀속 반납 {remainder}개 (개발자 지정 필요)"
     return applied, anomaly
+
+
+def assign_return(map_key, chest, ret, holder):
+    """미귀속 반납을 특정 보유자의 몫으로 확정한다 - 그 보유자의 장부에서 빠지고 재고가 다시 계산된다."""
+    catalog = _catalog(map_key, ret.item_id)
+    if catalog is None or catalog.max_count is None:
+        return False, "공용템 목록에 없는 아이템입니다"
+    ledger = _ledger_row(map_key, holder, ret.item_id)
+    held = ledger.held_count if ledger else 0
+    if held < ret.count:
+        return False, f"{holder}님 보유 {held}개 < 반납 {ret.count}개 (보유 수정 후 다시 지정하세요)"
+    ledger.held_count -= ret.count
+    _sync_stock(map_key, chest, ret.item_id, catalog.display_name, catalog.max_count)
+    return True, None
 
 
 def capture(map_key, chest, items):

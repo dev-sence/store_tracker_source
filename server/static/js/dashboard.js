@@ -372,6 +372,67 @@
     }
   }
 
+  function escapeText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function loadUnassignedReturns() {
+    const container = document.getElementById('unassignedReturnList');
+    if (!isDeveloper || !currentMap || !container) return;
+    try {
+      const [returnsRes, membersRes] = await Promise.all([
+        fetch(`/api/admin/unassigned-returns?map=${encodeURIComponent(currentMap)}`),
+        fetch('/api/admin/members'),
+      ]);
+      const returns = await returnsRes.json();
+      const members = await membersRes.json();
+      if (!returns.length) {
+        container.innerHTML = '<div class="text-secondary small">미귀속 반납이 없습니다.</div>';
+        return;
+      }
+      const options = members.map((m) => `<option value="${escapeText(m.minecraft_username)}">${escapeText(m.minecraft_username)}</option>`).join('');
+      container.innerHTML = returns.map((r) => `
+        <div class="d-flex align-items-center justify-content-between panel p-2 px-3 gap-2 flex-wrap">
+          <div>
+            <span>${escapeText(r.display_name)} x${r.count}</span>
+            <div class="text-secondary small">넣은 사람: ${escapeText(r.depositor)} · ${escapeText(r.created_at.slice(0, 16).replace('T', ' '))}</div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm" style="width:auto;" data-return-select="${r.id}">
+              <option value="">몫 주인 선택</option>${options}
+            </select>
+            <button class="btn btn-sm btn-accent unassigned-assign-btn" data-return-id="${r.id}">귀속</button>
+          </div>
+        </div>`).join('');
+      container.querySelectorAll('.unassigned-assign-btn').forEach((btn) => {
+        btn.addEventListener('click', () => handleAssignReturn(btn.dataset.returnId));
+      });
+    } catch (err) {
+      container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  async function handleAssignReturn(returnId) {
+    const select = document.querySelector(`[data-return-select="${returnId}"]`);
+    const username = select ? select.value : '';
+    if (!username) {
+      Swal.fire({ icon: 'warning', text: '몫 주인을 먼저 고르세요.' });
+      return;
+    }
+    const res = await fetch(`/api/admin/unassigned-returns/${returnId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      Swal.fire({ icon: 'error', text: body.error || '귀속 실패' });
+      return;
+    }
+    loadUnassignedReturns();
+    refresh(false);
+  }
+
   function bindAddPublicItemButton() {
     const btn = document.getElementById('addPublicItemBtn');
     if (!btn) return;
@@ -471,6 +532,7 @@
   loadChestStrict();
   loadMembers();
   loadPublicItems();
+  loadUnassignedReturns();
   loadChestLogs();
   loadLoginLogs();
   loadApplications();

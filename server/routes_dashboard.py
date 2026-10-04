@@ -11,7 +11,7 @@ import inventory
 from routes_public import _normalize_map_key
 from models import (
     ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger, PublicItemType,
-    RequestLog, TrackedChest, db,
+    RequestLog, TrackedChest, UnassignedReturn, db,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -562,6 +562,41 @@ def admin_toggle_member_developer(member_id):
 def admin_list_members():
     members = Member.query.order_by(Member.added_at.desc()).all()
     return jsonify([m.to_dict() for m in members])
+
+
+@dashboard_bp.get("/api/admin/unassigned-returns")
+@developer_required
+def list_unassigned_returns():
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    rows = UnassignedReturn.query.filter_by(map_key=map_key, assigned_to=None).order_by(UnassignedReturn.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@dashboard_bp.post("/api/admin/unassigned-returns/<int:return_id>/assign")
+@developer_required
+def assign_unassigned_return(return_id):
+    ret = UnassignedReturn.query.get(return_id)
+    if ret is None or ret.assigned_to is not None:
+        return jsonify({"error": "이미 처리됐거나 없는 반납입니다"}), 404
+    data = request.get_json(silent=True) or {}
+    holder = (data.get("username") or "").strip()
+    member = Member.query.filter(db.func.lower(Member.minecraft_username) == holder.lower()).first()
+    if member is None:
+        return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
+
+    chest = TrackedChest.query.filter_by(map_key=ret.map_key).first()
+    if chest is None:
+        return jsonify({"error": "등록된 상자가 없습니다"}), 404
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
+    ok, message = inventory.assign_return(ret.map_key, chest_pos, ret, member.minecraft_username)
+    if not ok:
+        db.session.rollback()
+        return jsonify({"error": message}), 400
+
+    ret.assigned_to = member.minecraft_username
+    ret.assigned_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return jsonify({"status": "ok", "assigned_to": ret.assigned_to})
 
 
 @dashboard_bp.post("/api/admin/members")

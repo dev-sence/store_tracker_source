@@ -250,3 +250,28 @@ class DashboardMessage(db.Model):
     map_key = db.Column(db.String(128), primary_key=True)
     channel_id = db.Column(db.String(32), nullable=False)
     message_id = db.Column(db.String(32), nullable=True)
+
+
+class UnassignedReturn(db.Model):
+    """본인 보유 없이 상자에 넣은 물건(남의 몫을 대신 넣은 것). 개발자가 어느 보유자의 몫인지 지정하기 전까지 쌓여 있다."""
+    __tablename__ = "unassigned_returns"
+
+    id = db.Column(db.Integer, primary_key=True)
+    map_key = db.Column(db.String(128), nullable=False, index=True)
+    item_id = db.Column(db.String(128), nullable=False)
+    display_name = db.Column(db.String(128), nullable=False)
+    count = db.Column(db.Integer, nullable=False)
+    depositor = db.Column(db.String(32), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    assigned_to = db.Column(db.String(32), nullable=True)
+    assigned_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "display_name": self.display_name,
+            "count": self.count,
+            "depositor": self.depositor,
+            "created_at": self.created_at.isoformat(),
+        }
