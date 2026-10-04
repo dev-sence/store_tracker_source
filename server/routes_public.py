@@ -7,6 +7,7 @@ from cryptography.exceptions import InvalidTag
 from flask import Blueprint, current_app, jsonify, request
 
 import discord_client
+import inventory
 from models import (
     ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
     RequestLog, TrackedChest, db,
@@ -105,85 +106,40 @@ def _parse_xyz(data):
         return None
 
 
-def _resync_inventory_from_snapshot(map_key, position, items):
-    """상자를 열거나 닫을 때 실제로 관찰한 내용물로 재고를 그대로 덮어쓴다. 개별 이벤트 기반
-    증감(delta)만으로는 놓치거나 중복된 이벤트가 있을 때 재고가 실제와 어긋날 수 있는데,
-    상자를 볼 때마다 이렇게 실측치로 다시 맞춰주면 "재고"가 항상 실시간 실제 수량에 수렴한다."""
-    dimension = position.get("dimension")
-    x, y, z = position.get("x"), position.get("y"), position.get("z")
-    if not map_key or not dimension or x is None or y is None or z is None:
-        return
+def _registered_chest_position(map_key):
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return None
+    return {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
 
+
+def _snapshot_mismatches(map_key, position, items):
+    """상자 열림/닫힘 시점의 실측 수량과 재고 장부를 비교만 한다 (재고는 건드리지 않음).
+    어긋난 항목 설명 목록을 반환한다 - 비어 있으면 일치."""
+    dimension = position.get("dimension")
     observed = {}
     for item in items:
-        if not isinstance(item, dict):
+        if isinstance(item, dict) and item.get("item_id"):
+            try:
+                observed[item["item_id"]] = observed.get(item["item_id"], 0) + int(item.get("count", 0))
+            except (TypeError, ValueError):
+                continue
+
+    stock_rows = ChestInventoryItem.query.filter_by(
+        map_key=map_key, dimension=dimension, x=position.get("x"), y=position.get("y"), z=position.get("z"),
+    ).all()
+    expected = {row.item_id: row.count for row in stock_rows}
+
+    mismatches = []
+    for item_id in sorted(set(observed) | set(expected)):
+        catalog = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
+        if catalog is None:
             continue
-        item_id = item.get("item_id")
-        if not item_id:
-            continue
-        try:
-            count = int(item.get("count", 0))
-        except (TypeError, ValueError):
-            continue
-        observed[item_id] = (item.get("item_name", item_id), count)
-
-    existing = {
-        row.item_id: row for row in ChestInventoryItem.query.filter_by(
-            map_key=map_key, dimension=dimension, x=x, y=y, z=z,
-        ).all()
-    }
-
-    for item_id, (display_name, count) in observed.items():
-        row = existing.get(item_id)
-        if row is None:
-            db.session.add(ChestInventoryItem(
-                map_key=map_key, dimension=dimension, x=x, y=y, z=z,
-                item_id=item_id, display_name=display_name, count=count,
-            ))
-        else:
-            row.count = count
-            row.display_name = display_name
-
-    for item_id, row in existing.items():
-        if item_id not in observed:
-            db.session.delete(row)
-
-
-def _adjust_inventory(map_key, position, item_id, display_name, delta):
-    """등록된 상자(위치가 있는)의 실시간 재고를 delta만큼 증감시킨다. 없으면 새로 만든다."""
-    if not map_key or not position.get("dimension"):
-        return
-    row = ChestInventoryItem.query.filter_by(
-        map_key=map_key, dimension=position["dimension"],
-        x=position["x"], y=position["y"], z=position["z"], item_id=item_id,
-    ).first()
-    if row is None:
-        row = ChestInventoryItem(
-            map_key=map_key, dimension=position["dimension"],
-            x=position["x"], y=position["y"], z=position["z"],
-            item_id=item_id, display_name=display_name, count=0,
-        )
-        db.session.add(row)
-    row.count += delta
-    row.display_name = display_name
-
-
-def _adjust_ledger(map_key, username, item_id, delta):
-    """이 플레이어가 등록 상자를 통해 지금 들고 있다고 인정되는 개수를 delta만큼 증감(0 미만 금지).
-    정식으로 캡처되어 공용템 목록(PublicItemType)에 있는 아이템만 장부에 크레딧을 준다 -
-    그렇지 않으면 개발자 빌드로 아무 개인템이나 상자에 넣었다 뺐다 하는 것만으로 "공용템 자격"이
-    생겨버리는 구멍이 생긴다.
-    """
-    if delta > 0 and PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first() is None:
-        return
-
-    row = PlayerItemLedger.query.filter_by(
-        map_key=map_key, minecraft_username=username, item_id=item_id,
-    ).first()
-    if row is None:
-        row = PlayerItemLedger(map_key=map_key, minecraft_username=username, item_id=item_id, held_count=0)
-        db.session.add(row)
-    row.held_count = max(0, row.held_count + delta)
+        real = observed.get(item_id, 0)
+        book = expected.get(item_id, 0)
+        if real != book:
+            mismatches.append(f"{catalog.display_name}(실측 {real}/장부 {book})")
+    return mismatches
 
 
 def _refresh_dashboard(map_key):
@@ -339,15 +295,23 @@ def log_event():
     )
     db.session.add(event)
 
-    # 등록된 공용템 상자에서 일어난 입출고만 실시간 재고/보유 장부에 반영한다 (경유 상자는 그런 개념이 없음).
+    # 등록된 공용템 상자에서 일어난 입출고만 재고/보유 장부에 반영한다 (경유 상자는 장부와 무관한 감사 기록).
+    anomaly = None
     if event.chest_label and event.action in ("TAKE", "DEPOSIT"):
-        inventory_delta = -count if event.action == "TAKE" else count
-        _adjust_inventory(event.map_key, position, event.item_id, event.item_name, inventory_delta)
-        # 꺼내면 "내가 들고 있는 공용템" 개수가 늘고, 넣으면 준다.
-        ledger_delta = count if event.action == "TAKE" else -count
-        _adjust_ledger(event.map_key, username, event.item_id, ledger_delta)
+        chest = {"dimension": position.get("dimension"), "x": position.get("x"),
+                 "y": position.get("y"), "z": position.get("z")}
+        if None in chest.values():
+            anomaly = "상자 좌표 없음"
+        elif event.action == "TAKE":
+            _, anomaly = inventory.take(event.map_key, chest, username, event.item_id, count)
+        else:
+            _, anomaly = inventory.deposit(event.map_key, chest, username, event.item_id, count)
 
     db.session.commit()
+
+    if anomaly:
+        _dev_log("ledger-anomaly", username,
+                 f"{event.action} {event.item_name} x{count} 반영 이상: {anomaly}", data, event_id=event.id)
 
     if event.chest_label and event.action in ("TAKE", "DEPOSIT"):
         _refresh_dashboard(event.map_key)
@@ -411,10 +375,10 @@ def chest_log():
 
     chest_label = data.get("chest_label")
     if chest_label:
-        # 등록된 공용템 상자일 때만 "재고" 개념이 있다 (경유 상자는 애초에 추적 대상 아님).
-        _resync_inventory_from_snapshot(data["map_key"], position, items)
-        db.session.commit()
-        _refresh_dashboard(data["map_key"])
+        mismatches = _snapshot_mismatches(data["map_key"], position, items)
+        if mismatches:
+            _dev_log("stock-mismatch", username,
+                     f"{label} 시점 실측과 재고 불일치: " + ", ".join(mismatches), data)
 
     _dev_log(
         "chest-log", username,
@@ -535,37 +499,25 @@ def save_public_items():
         return jsonify({"error": "invalid fields"}), 400
     map_key = data["map_key"]
 
-    # 캡처는 "지금 이 순간"을 기준으로 삼는다 - 기존 공용템 목록/이 상자의 재고를 전부 지우고 새로 채운다.
-    PublicItemType.query.filter_by(map_key=map_key).delete()
-    if position.get("dimension"):
-        ChestInventoryItem.query.filter_by(
-            map_key=map_key, dimension=position["dimension"],
-            x=position.get("x"), y=position.get("y"), z=position.get("z"),
-        ).delete()
+    if not position.get("dimension") or position.get("x") is None or position.get("y") is None or position.get("z") is None:
+        return jsonify({"error": "캡처 위치가 필요합니다"}), 400
+    chest = {"dimension": position["dimension"], "x": position["x"], "y": position["y"], "z": position["z"]}
 
-    saved = []
+    # 캡처 = 지금 이 상자 내용물이 공용템 전체라는 기준선. 최대값을 고정하고 모든 보유 장부를 0으로 되돌린다.
+    captured = []
     for item in data["items"]:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or not item.get("item_id"):
             continue
-        item_id = item.get("item_id")
-        display_name = item.get("display_name", item_id)
         try:
             count = int(item.get("count", 0))
         except (TypeError, ValueError):
-            count = 0
-        if not item_id:
             continue
+        if count <= 0:
+            continue
+        captured.append((item["item_id"], item.get("display_name", item["item_id"]), count))
 
-        db.session.add(PublicItemType(map_key=map_key, item_id=item_id, display_name=display_name))
-
-        if position.get("dimension"):
-            db.session.add(ChestInventoryItem(
-                map_key=map_key, dimension=position["dimension"],
-                x=position["x"], y=position["y"], z=position["z"],
-                item_id=item_id, display_name=display_name, count=count,
-            ))
-
-        saved.append(item_id)
+    inventory.capture(map_key, chest, captured)
+    saved = [item_id for item_id, _, _ in captured]
     db.session.commit()
     _refresh_dashboard(map_key)
 
@@ -627,8 +579,12 @@ def reset_held_items():
     if item_ids:
         query = query.filter(PlayerItemLedger.item_id.in_(item_ids))
     rows = query.all()
+    chest = _registered_chest_position(map_key)
     for row in rows:
-        row.held_count = 0
+        if chest is not None:
+            inventory.set_held(map_key, chest, username, row.item_id, 0)
+        else:
+            row.held_count = 0
     db.session.commit()
     _refresh_dashboard(map_key)
 

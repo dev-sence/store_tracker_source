@@ -141,15 +141,17 @@ class PublicItemType(db.Model):
     map_key = db.Column(db.String(128), nullable=False, index=True)
     item_id = db.Column(db.String(128), nullable=False)  # 예: minecraft:diamond_pickaxe
     display_name = db.Column(db.String(128), nullable=False)
+    # 개발자 캡처 때 고정되는 이 공용템의 총 개수. 재고 = max_count - 전체 보유 합으로 항상 재계산된다.
+    max_count = db.Column(db.Integer, nullable=True)
     added_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
     def to_dict(self):
-        return {"item_id": self.item_id, "display_name": self.display_name}
+        return {"item_id": self.item_id, "display_name": self.display_name, "max_count": self.max_count}
 
 
 class ChestInventoryItem(db.Model):
-    """특정 상자(좌표)의 아이템별 '현재 예상 재고'. 캡처 시점 수량을 기준값으로 저장하고,
-    이후 TAKE/DEPOSIT 이벤트가 들어올 때마다 서버가 증감시켜서 실시간 재고를 유지한다."""
+    """특정 상자(좌표)의 아이템별 재고. PublicItemType.max_count에서 전체 보유 합을 뺀 값으로만 갱신된다
+    (inventory.py 참고 - 직접 증감시키지 않는다)."""
     __tablename__ = "chest_inventory"
     __table_args__ = (db.UniqueConstraint("map_key", "dimension", "x", "y", "z", "item_id"),)
 

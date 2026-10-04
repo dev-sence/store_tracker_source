@@ -7,6 +7,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 
 import discord_backoff
 import discord_oauth
+import inventory
 from routes_public import _normalize_map_key
 from models import (
     ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger, PublicItemType,
@@ -429,7 +430,7 @@ def admin_add_public_item():
     if existing is not None:
         return jsonify({"error": "이미 등록된 아이템입니다"}), 409
 
-    item = PublicItemType(map_key=map_key, item_id=item_id, display_name=display_name)
+    item = PublicItemType(map_key=map_key, item_id=item_id, display_name=display_name, max_count=0)
     db.session.add(item)
     db.session.commit()
     return jsonify(item.to_dict()), 201
@@ -615,21 +616,12 @@ def admin_adjust_inventory():
     if chest is None:
         return jsonify({"error": "no registered chest for this map"}), 404
 
-    row = ChestInventoryItem.query.filter_by(
-        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
-    ).first()
-    if row is None:
-        catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
-        display_name = catalog_entry.display_name if catalog_entry else item_id
-        row = ChestInventoryItem(
-            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
-            item_id=item_id, display_name=display_name, count=count,
-        )
-        db.session.add(row)
-    else:
-        row.count = count
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
+    stock = inventory.set_stock(map_key, chest_pos, item_id, count)
+    if stock is None:
+        return jsonify({"error": "공용템 목록에 없는 아이템입니다 (먼저 캡처하세요)"}), 400
     db.session.commit()
-    return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
+    return jsonify({"status": "ok", "item_id": item_id, "count": stock})
 
 
 @dashboard_bp.post("/api/manual-transfer")
@@ -660,36 +652,17 @@ def manual_transfer():
 
     catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
     display_name = catalog_entry.display_name if catalog_entry else item_id
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
 
-    stock_row = ChestInventoryItem.query.filter_by(
-        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
-    ).first()
-    current_stock = stock_row.count if stock_row else 0
-    ledger_row = PlayerItemLedger.query.filter_by(
-        map_key=map_key, minecraft_username=username, item_id=item_id,
-    ).first()
-    current_held = ledger_row.held_count if ledger_row else 0
-
-    if action == "HOLD" and count > current_stock:
-        return jsonify({"error": f"재고({current_stock}개)보다 많이 뺄 수 없습니다"}), 400
-    if action == "RELEASE" and count > current_held:
-        return jsonify({"error": f"{username}님이 들고 있는 개수({current_held}개)보다 많이 반납할 수 없습니다"}), 400
-
-    stock_delta = -count if action == "HOLD" else count
-    ledger_delta = count if action == "HOLD" else -count
-
-    if stock_row is None:
-        stock_row = ChestInventoryItem(
-            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
-            item_id=item_id, display_name=display_name, count=0,
-        )
-        db.session.add(stock_row)
-    stock_row.count = max(0, stock_row.count + stock_delta)
-
-    if ledger_row is None:
-        ledger_row = PlayerItemLedger(map_key=map_key, minecraft_username=username, item_id=item_id, held_count=0)
-        db.session.add(ledger_row)
-    ledger_row.held_count = max(0, ledger_row.held_count + ledger_delta)
+    if action == "HOLD":
+        applied, anomaly = inventory.take(map_key, chest_pos, username, item_id, count)
+        rejected_message = "재고를 넘게 뺄 수 없습니다"
+    else:
+        applied, anomaly = inventory.deposit(map_key, chest_pos, username, item_id, count)
+        rejected_message = "본인이 들고 있는 개수보다 많이 반납할 수 없습니다"
+    if applied != count:
+        db.session.rollback()
+        return jsonify({"error": f"{rejected_message} ({anomaly})"}), 400
 
     event = Event(
         minecraft_username=username, item_id=item_id, item_name=display_name,

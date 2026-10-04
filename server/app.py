@@ -23,6 +23,7 @@ _COLUMN_MIGRATIONS = [
     ("members", "discord_username", "ALTER TABLE members ADD COLUMN discord_username VARCHAR(64)"),
     ("members", "mod_first_linked_at", "ALTER TABLE members ADD COLUMN mod_first_linked_at TIMESTAMP WITH TIME ZONE"),
     ("members", "mod_last_linked_at", "ALTER TABLE members ADD COLUMN mod_last_linked_at TIMESTAMP WITH TIME ZONE"),
+    ("public_item_types", "max_count", "ALTER TABLE public_item_types ADD COLUMN max_count INTEGER"),
 ]
 
 

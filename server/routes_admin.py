@@ -3,6 +3,8 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import func, or_
 
+import inventory
+
 from models import (
     ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
     RequestLog, TrackedChest, db,
@@ -101,9 +103,7 @@ def rename_map_key():
 @admin_bp.post("/held-items/set")
 @require_admin
 def set_held_item():
-    """특정 유저의 보유 장부(PlayerItemLedger)를 절대값으로 직접 맞춘다 - "재고 수동 수정"의
-    보유 쪽 버전. 재고(ChestInventoryItem)는 건드리지 않는다 - 실제로 상자 밖에서 들고 있는
-    개수를 알고 있을 때(빠른 테스트로 장부가 꼬였을 때 등) 바로잡는 용도."""
+    """특정 유저의 보유 장부를 절대값으로 직접 맞춘다. 재고는 최대값에서 다시 계산되므로 항상 같이 맞는다."""
     data = request.get_json(silent=True) or {}
     map_key = (data.get("map_key") or "").strip()
     username = (data.get("username") or "").strip()
@@ -120,14 +120,13 @@ def set_held_item():
         return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
     username = member.minecraft_username
 
-    row = PlayerItemLedger.query.filter_by(
-        map_key=map_key, minecraft_username=username, item_id=item_id,
-    ).first()
-    if row is None:
-        row = PlayerItemLedger(map_key=map_key, minecraft_username=username, item_id=item_id, held_count=count)
-        db.session.add(row)
-    else:
-        row.held_count = count
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "등록된 상자가 없습니다"}), 404
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
+    if inventory.set_held(map_key, chest_pos, username, item_id, count) is None:
+        return jsonify({"error": "공용템 목록에 없는 아이템입니다 (먼저 캡처하세요)"}), 400
+    row = PlayerItemLedger.query.filter_by(map_key=map_key, minecraft_username=username, item_id=item_id).first()
     db.session.commit()
     return jsonify({"status": "ok", "username": username, "item_id": item_id, "held_count": row.held_count})
 
@@ -135,8 +134,7 @@ def set_held_item():
 @admin_bp.post("/inventory/set")
 @require_admin
 def set_inventory():
-    """등록된 상자의 실제 재고(ChestInventoryItem)를 절대값으로 직접 맞춘다 - "재고 수동 수정"의
-    재고 쪽 버전 (보유 쪽은 /admin/held-items/set). 보유 장부는 건드리지 않는다."""
+    """재고를 절대값으로 맞춘다 - 최대값을 (재고 + 전체 보유 합)으로 조정해서 장부와 어긋나지 않게 한다."""
     data = request.get_json(silent=True) or {}
     map_key = (data.get("map_key") or "").strip()
     item_id = data.get("item_id")
@@ -151,21 +149,33 @@ def set_inventory():
     if chest is None:
         return jsonify({"error": "등록된 상자가 없습니다"}), 404
 
-    row = ChestInventoryItem.query.filter_by(
-        map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=item_id,
-    ).first()
-    if row is None:
-        catalog_entry = PublicItemType.query.filter_by(map_key=map_key, item_id=item_id).first()
-        display_name = catalog_entry.display_name if catalog_entry else item_id
-        row = ChestInventoryItem(
-            map_key=map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z,
-            item_id=item_id, display_name=display_name, count=count,
-        )
-        db.session.add(row)
-    else:
-        row.count = count
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
+    stock = inventory.set_stock(map_key, chest_pos, item_id, count)
+    if stock is None:
+        return jsonify({"error": "공용템 목록에 없는 아이템입니다 (먼저 캡처하세요)"}), 400
     db.session.commit()
-    return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
+    return jsonify({"status": "ok", "item_id": item_id, "count": stock})
+
+
+@admin_bp.post("/init-max-counts")
+@require_admin
+def init_max_counts():
+    """최대값 도입 전 공용템에 최대값을 한 번 채운다: 최대값 = 현재 재고 + 전체 보유 합.
+    이미 최대값이 있는 아이템은 건드리지 않는다. 이후 개발자 캡처로 정식 기준선을 다시 잡으면 된다."""
+    updated = []
+    for catalog in PublicItemType.query.filter(PublicItemType.max_count.is_(None)).all():
+        chest = TrackedChest.query.filter_by(map_key=catalog.map_key).first()
+        if chest is None:
+            continue
+        stock_row = ChestInventoryItem.query.filter_by(
+            map_key=catalog.map_key, dimension=chest.dimension, x=chest.x, y=chest.y, z=chest.z, item_id=catalog.item_id,
+        ).first()
+        current_stock = stock_row.count if stock_row else 0
+        held = inventory.total_held(catalog.map_key, catalog.item_id)
+        catalog.max_count = current_stock + held
+        updated.append({"item_id": catalog.item_id, "max_count": catalog.max_count})
+    db.session.commit()
+    return jsonify({"status": "ok", "updated": updated})
 
 
 @admin_bp.post("/backfill-mod-link")
