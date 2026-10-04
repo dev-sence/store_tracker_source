@@ -21,6 +21,8 @@ DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 _COLUMN_MIGRATIONS = [
     ("members", "is_developer", "ALTER TABLE members ADD COLUMN is_developer BOOLEAN NOT NULL DEFAULT FALSE"),
     ("members", "discord_username", "ALTER TABLE members ADD COLUMN discord_username VARCHAR(64)"),
+    ("members", "mod_first_linked_at", "ALTER TABLE members ADD COLUMN mod_first_linked_at TIMESTAMP WITH TIME ZONE"),
+    ("members", "mod_last_linked_at", "ALTER TABLE members ADD COLUMN mod_last_linked_at TIMESTAMP WITH TIME ZONE"),
 ]
 
 

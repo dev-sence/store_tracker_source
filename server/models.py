@@ -24,6 +24,9 @@ class Member(db.Model):
     # 개발자 탭(기능 토글/상세 로그/멤버·재고 관리)에 접근 가능한지 여부. sence1012(최고관리자)는
     # 이 값과 무관하게 항상 개발자로 취급되고, 이 값을 바꿀 수 있는 것도 sence1012뿐이다.
     is_developer = db.Column(db.Boolean, nullable=False, default=False)
+    # 모드가 이 멤버 이름으로 서버에 한 번이라도 연동된 적이 있는지 - 최초/최종 시각 (없으면 None = 미연동).
+    mod_first_linked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    mod_last_linked_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     def to_dict(self):
         return {
@@ -35,6 +38,8 @@ class Member(db.Model):
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "is_developer": self.is_developer,
+            "mod_first_linked_at": self.mod_first_linked_at.isoformat() if self.mod_first_linked_at else None,
+            "mod_last_linked_at": self.mod_last_linked_at.isoformat() if self.mod_last_linked_at else None,
         }
 
 

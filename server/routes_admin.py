@@ -1,6 +1,7 @@
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
+from sqlalchemy import func, or_
 
 from models import (
     ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
@@ -164,6 +165,38 @@ def set_inventory():
         row.count = count
     db.session.commit()
     return jsonify({"status": "ok", "item_id": item_id, "count": row.count})
+
+
+@admin_bp.post("/backfill-mod-link")
+@require_admin
+def backfill_mod_link():
+    """RequestLog에 남아 있는 성공 연동 기록(인증됨/기록됨/상자 열림·닫힘)으로 멤버별 최초/최종
+    연동 시각을 채운다. 이미 찍힌 값보다 더 과거/최근인 경우에만 갱신하므로 여러 번 돌려도 안전하다."""
+    success = or_(
+        (RequestLog.endpoint == "check-member") & RequestLog.result.like("인증됨%"),
+        (RequestLog.endpoint == "log-event") & RequestLog.result.like("기록됨%"),
+        (RequestLog.endpoint == "chest-log") & RequestLog.result.like("상자%"),
+    )
+    spans = db.session.query(
+        RequestLog.minecraft_username,
+        func.min(RequestLog.created_at),
+        func.max(RequestLog.created_at),
+    ).filter(success).group_by(RequestLog.minecraft_username).all()
+    spans_by_user = {name: (first, last) for name, first, last in spans if name}
+
+    updated = 0
+    for member in Member.query.all():
+        span = spans_by_user.get(member.minecraft_username)
+        if span is None:
+            continue
+        first, last = span
+        if member.mod_first_linked_at is None or first < member.mod_first_linked_at:
+            member.mod_first_linked_at = first
+        if member.mod_last_linked_at is None or last > member.mod_last_linked_at:
+            member.mod_last_linked_at = last
+        updated += 1
+    db.session.commit()
+    return jsonify({"status": "ok", "members_with_history": updated})
 
 
 @admin_bp.get("/request-logs")

@@ -193,6 +193,9 @@ const StoreTrackerRender = {
       const linked = m.discord_id
         ? `<span class="badge bg-success">연동됨</span><span class="text-secondary small">디코: ${escape(m.discord_username || '?')}</span>`
         : '<span class="badge bg-secondary">미연동</span>';
+      const modLink = m.mod_first_linked_at
+        ? `<span class="badge bg-info text-dark">모드 연동 이력</span><span class="text-secondary small">최초 ${this.formatTime(m.mod_first_linked_at)} · 최근 ${this.formatTime(m.mod_last_linked_at)}</span>`
+        : '<span class="badge bg-dark border border-secondary">모드 연동 없음</span>';
       const isSuperAdminRow = m.minecraft_username.toLowerCase() === 'sence1012';
       const isSelf = m.minecraft_username.toLowerCase() === currentUsername.toLowerCase();
 
@@ -220,6 +223,7 @@ const StoreTrackerRender = {
         <div class="d-flex align-items-center gap-2">
           <span>${escape(m.minecraft_username)}</span>
           ${linked}
+          ${modLink}
           ${devControl}
         </div>
         ${deleteBtn}

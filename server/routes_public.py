@@ -86,6 +86,13 @@ def _dev_log(endpoint: str, username, result: str, payload=None, event_id=None):
     )
 
 
+def _mark_mod_linked(member):
+    now = datetime.now(timezone.utc)
+    if member.mod_first_linked_at is None:
+        member.mod_first_linked_at = now
+    member.mod_last_linked_at = now
+
+
 def _require_admin():
     return request.headers.get("X-Admin-Token", "") == current_app.config["ADMIN_TOKEN"]
 
@@ -270,6 +277,7 @@ def check_member():
         _dev_log("check-member", username, "미등록 (404)", data)
         return jsonify({"status": "not_found"}), 404
 
+    _mark_mod_linked(member)
     _dev_log("check-member", username, "인증됨 (200)", data)
     return jsonify({"status": "ok"}), 200
 
@@ -296,6 +304,8 @@ def log_event():
         # 서버측 방어적 재검증: 클라이언트 게이트가 우회되어도 미등록 유저 이벤트는 저장/게시하지 않는다.
         _dev_log("log-event", username, "거부: 미등록 사용자 (404)", data)
         return jsonify({"status": "not_found"}), 404
+
+    _mark_mod_linked(member)
 
     try:
         occurred_at = _parse_occurred_at(data["occurred_at"])
@@ -380,6 +390,8 @@ def chest_log():
     if data["session"] not in ("OPEN", "CLOSE"):
         _dev_log("chest-log", username, "실패: 잘못된 session 값", data)
         return jsonify({"error": "invalid session"}), 400
+
+    _mark_mod_linked(member)
 
     position = data["position"]
     items = data.get("items", [])
