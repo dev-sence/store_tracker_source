@@ -71,7 +71,8 @@ def remove_member(username):
 @require_admin
 def list_events():
     limit = min(int(request.args.get("limit", 100)), 500)
-    events = Event.query.order_by(Event.received_at.desc()).limit(limit).all()
+    offset = int(request.args.get("offset", 0))
+    events = Event.query.order_by(Event.received_at.desc()).offset(offset).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
 
 
