@@ -417,12 +417,20 @@ public final class ContainerTracker {
 
         Async.run(() -> {
             LocalLogger.log(event);
-            if (MemberGate.isAuthorized()) {
-                ApiClient.Result result = ApiClient.postEncrypted(
-                        BuildInfo.API_BASE_URL, "/api/log-event", channel(), event);
-                if (result.statusCode() != 202) {
-                    LOGGER.warn("이벤트 전송 실패 (status={})", result.statusCode());
-                }
+            if (!MemberGate.isAuthorized()) {
+                // 서버 전환 직후 등, 재인증이 아직 안 끝난 사이에 상자를 건드리면 조용히 누락되던 문제가
+                // 있었다 - 재시도는 따로 하지 않고(꼬일 위험), 대신 반드시 눈에 보이게 알린다.
+                LOGGER.warn("인증 미완료 상태라 이벤트를 보내지 않음: {} {} x{}", action, itemName, count);
+                notifyPlayer("§e[StoreTracker] 인증 확인 중이라 방금 " + itemName + " " + count
+                        + "개 입출고가 기록되지 않았습니다. 잠시 후 상자를 다시 여닫고 한 번 더 해주세요.");
+                return;
+            }
+            ApiClient.Result result = ApiClient.postEncrypted(
+                    BuildInfo.API_BASE_URL, "/api/log-event", channel(), event);
+            if (result.statusCode() != 202) {
+                LOGGER.warn("이벤트 전송 실패 (status={})", result.statusCode());
+                notifyPlayer("§c[StoreTracker] 방금 " + itemName + " " + count
+                        + "개 입출고 전송에 실패했습니다. 상자를 다시 여닫고 한 번 더 해주세요.");
             }
         });
     }
@@ -438,7 +446,14 @@ public final class ContainerTracker {
     /** 등록된 공용템 상자를 열거나 닫는 순간의 전체 내용물 스냅샷을 개발자 로그용으로 서버에 보낸다. */
     private static void sendChestLog(String session, String chestLabel, String dimension, BlockPos pos,
                                       Map<String, Integer> counts, Map<String, String> names) {
-        if (chestLabel == null || !MemberGate.isAuthorized() || !FeatureToggles.chestLog()) {
+        if (chestLabel == null) {
+            return;
+        }
+        if (!MemberGate.isAuthorized()) {
+            LOGGER.warn("인증 미완료 상태라 상자 {} 스냅샷을 보내지 않음", session);
+            return;
+        }
+        if (!FeatureToggles.chestLog()) {
             return;
         }
 
@@ -472,6 +487,15 @@ public final class ContainerTracker {
             ApiClient.Result result = ApiClient.postEncrypted(BuildInfo.API_BASE_URL, "/api/chest-log", channel(), body);
             if (result.statusCode() != 200) {
                 LOGGER.warn("상자 열림/닫힘 로그 전송 실패 (status={})", result.statusCode());
+            }
+        });
+    }
+
+    private static void notifyPlayer(String message) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        client.execute(() -> {
+            if (client.player != null) {
+                client.player.sendMessage(Text.literal(message), false);
             }
         });
     }
