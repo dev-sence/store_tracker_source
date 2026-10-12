@@ -15,13 +15,13 @@ import java.util.List;
  * 나머지 10개 버전은 자동으로 빠진다(행렬/텍스처 API가 버전마다 달라서 전부 지원은 못 함). */
 public final class AlbaHudOverlay {
     private static final int MAX_ROWS = 6;
-    private static final int LINE_HEIGHT = 10;
-    private static final int ROW_HEIGHT = LINE_HEIGHT * 2;
-    private static final int PADDING = 5;
-    private static final int JOB_ICON_SIZE = 10;
-    private static final int ZONE_SWATCH_SIZE = 6;
-    private static final int FACE_SIZE = 10;
-    private static final int FACE_GAP = 2;
+    private static final int LINE_HEIGHT = 12;
+    private static final int ROW_HEIGHT = LINE_HEIGHT * 2 + 2;
+    private static final int PADDING = 8;
+    private static final int JOB_ICON_SIZE = 16;
+    private static final int ZONE_SWATCH_SIZE = 10;
+    private static final int FACE_SIZE = 16;
+    private static final int FACE_GAP = 3;
 
     private static final int COLOR_BG = 0xCC1B1B1B;
     private static final int COLOR_BORDER = 0x66FFFFFF;
@@ -42,7 +42,7 @@ public final class AlbaHudOverlay {
             return;
         }
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null || client.currentScreen != null) {
+        if (client.player == null || client.currentScreen != null || client.options.hudHidden) {
             return;
         }
         int ox = settings.hudX;
@@ -52,21 +52,35 @@ public final class AlbaHudOverlay {
         AlbaPlatform.withHudScale(context, ox, oy, scale, () -> draw(context, client.textRenderer, ox, oy));
     }
 
-    private static void draw(DrawContext context, TextRenderer tr, int ox, int oy) {
+    /** 지금 패널을 실제로 그리면 가로/세로가 몇 픽셀일지 - 설정화면이 미리보기의 드래그 가능
+     * 영역을 정확히 알아야 해서 공개한다. */
+    static int[] measure(TextRenderer tr) {
         List<AlbaEntry> entries = AlbaTracker.getCachedHires();
         boolean faces = AlbaPlatform.richFeaturesAvailable();
         int textXOffset = faces ? FACE_SIZE * 2 + FACE_GAP + 4 : 0;
-
         int shown = Math.min(entries.size(), MAX_ROWS);
         int width = textXOffset + tr.getWidth("알바 현황") + PADDING * 2;
         int rowCount = entries.isEmpty() ? 1 : shown;
         int height = PADDING * 2 + LINE_HEIGHT + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
-
         for (AlbaEntry e : entries.subList(0, shown)) {
             int rowWidth = PADDING * 2 + textXOffset + tr.getWidth(e.employer() + " → " + e.employee())
                     + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 8;
             width = Math.max(width, rowWidth);
         }
+        return new int[]{width, height};
+    }
+
+    /** 패키지 내 공개 - 알바 설정화면이 "지금 실제로 보이는 모습 그대로" 미리보기를 그릴 때도 쓴다
+     * (더 이상 빈 네모가 아니라 진짜 내용을 그려서, 그걸 직접 드래그하는 느낌이 나게). */
+    static void draw(DrawContext context, TextRenderer tr, int ox, int oy) {
+        List<AlbaEntry> entries = AlbaTracker.getCachedHires();
+        boolean faces = AlbaPlatform.richFeaturesAvailable();
+        int textXOffset = faces ? FACE_SIZE * 2 + FACE_GAP + 4 : 0;
+
+        int[] size = measure(tr);
+        int width = size[0];
+        int height = size[1];
+        int shown = Math.min(entries.size(), MAX_ROWS);
 
         context.fill(ox, oy, ox + width, oy + height, COLOR_BG);
         drawBorder(context, ox, oy, width, height, COLOR_BORDER);
@@ -79,8 +93,9 @@ public final class AlbaHudOverlay {
             context.drawTextWithShadow(tr, Text.literal("고용된 알바가 없어요"), ox + PADDING, y, COLOR_MUTED);
         } else {
             for (AlbaEntry e : entries.subList(0, shown)) {
+                int rowStartY = y;
                 if (faces) {
-                    int faceY = y + (LINE_HEIGHT - FACE_SIZE) / 2;
+                    int faceY = rowStartY + (ROW_HEIGHT - FACE_SIZE) / 2;
                     drawFace(context, e.employer(), ox + PADDING, faceY);
                     drawFace(context, e.employee(), ox + PADDING + FACE_SIZE + FACE_GAP, faceY);
                 }
@@ -91,11 +106,12 @@ public final class AlbaHudOverlay {
                 AlbaJob job = AlbaJob.fromName(e.job());
                 int iconX = ox + width - PADDING - JOB_ICON_SIZE;
                 if (job != null) {
-                    context.drawItem(new ItemStack(job.icon()), iconX, y - 1);
+                    int iconY = rowStartY + (ROW_HEIGHT - JOB_ICON_SIZE) / 2;
+                    context.drawItem(new ItemStack(job.icon()), iconX, iconY);
                     AlbaZone zone = parseZone(e.zone());
                     if (zone != null) {
-                        int swatchX = iconX - ZONE_SWATCH_SIZE - 3;
-                        int swatchY = y + (LINE_HEIGHT - ZONE_SWATCH_SIZE) / 2;
+                        int swatchX = iconX - ZONE_SWATCH_SIZE - 4;
+                        int swatchY = rowStartY + (ROW_HEIGHT - ZONE_SWATCH_SIZE) / 2;
                         context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
                         drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
                     }

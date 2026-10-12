@@ -11,21 +11,20 @@ import net.minecraft.util.Identifier;
 
 import java.util.List;
 
-/** 1.21.11 전용 - HUD 위치를 실제로 드래그해서 옮길 수 있고(새 Click 기반 마우스 API), 크기조절·
- * 얼굴 아이콘도 진짜로 동작한다. "/알바설정" 또는 키바인드로 연다. */
+/** 1.21.11 전용 - 새 Click 기반 마우스 API로 HUD를 실제로 드래그해서 옮길 수 있다
+ * (미리보기가 지금 HUD랑 똑같은 내용을 그려서, 그걸 그대로 끄는 느낌). 크기조절·얼굴 아이콘도
+ * 진짜로 동작한다. "/알바설정" 또는 키바인드로 연다. */
 public class AlbaSettingsScreen extends Screen {
     private static final int PANEL_X = 20;
     private static final int PANEL_Y = 20;
-    private static final int PANEL_WIDTH = 280;
-    private static final int PREVIEW_SCALE_DIV = 4;
-    private static final int PREVIEW_W = 50;
-    private static final int PREVIEW_H = 18;
-    private static final int COLOR_BG = 0xE61B1B1B;
-    private static final int COLOR_BORDER = 0x66FFFFFF;
+    private static final int PANEL_WIDTH = 360;
+    private static final int ROW_H = 24;
+    private static final int COLOR_BG = 0xF01B1B1B;
+    private static final int COLOR_BORDER = 0x80FFFFFF;
     private static final int COLOR_TITLE = 0xFFECECEC;
     private static final int COLOR_MUTED = 0xFFA0A0A0;
-    private static final int FACE_SIZE = 12;
-    private static final int ZONE_SWATCH_SIZE = 8;
+    private static final int FACE_SIZE = 16;
+    private static final int ZONE_SWATCH_SIZE = 10;
 
     private ButtonWidget visibleToggleButton;
     private boolean draggingPreview = false;
@@ -42,24 +41,24 @@ public class AlbaSettingsScreen extends Screen {
             AlbaSettings settings = AlbaSettings.get();
             settings.hudVisible = !settings.hudVisible;
             settings.save();
-        }).dimensions(PANEL_X + 170, PANEL_Y + 40, 90, 20).build();
+        }).dimensions(PANEL_X + PANEL_WIDTH - 130, PANEL_Y + 44, 110, 22).build();
         addDrawableChild(visibleToggleButton);
 
         addDrawableChild(ButtonWidget.builder(Text.literal("-"), b -> AlbaSettings.get().adjustScale(-10))
-                .dimensions(PANEL_X + 170, PANEL_Y + 66, 20, 20).build());
+                .dimensions(PANEL_X + PANEL_WIDTH - 130, PANEL_Y + 78, 24, 22).build());
         addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> AlbaSettings.get().adjustScale(10))
-                .dimensions(PANEL_X + 194, PANEL_Y + 66, 20, 20).build());
+                .dimensions(PANEL_X + PANEL_WIDTH - 102, PANEL_Y + 78, 24, 22).build());
 
-        int rowY = PANEL_Y + 160;
+        int rowY = myListStartY();
         for (AlbaEntry entry : myHires()) {
             addDrawableChild(ButtonWidget.builder(Text.literal("수정"), b ->
                             client.setScreen(new AlbaGuiScreen(entry.employer(), entry.employee())))
-                    .dimensions(PANEL_X + PANEL_WIDTH - 50, rowY, 40, 16).build());
-            rowY += 18;
+                    .dimensions(PANEL_X + PANEL_WIDTH - 60, rowY, 48, 20).build());
+            rowY += ROW_H;
         }
 
         addDrawableChild(ButtonWidget.builder(Text.literal("닫기"), b -> close())
-                .dimensions(PANEL_X + PANEL_WIDTH - 54, PANEL_Y + panelHeight() - 26, 44, 20).build());
+                .dimensions(PANEL_X + PANEL_WIDTH - 64, PANEL_Y + panelHeight() - 32, 52, 22).build());
     }
 
     private List<AlbaEntry> myHires() {
@@ -70,16 +69,21 @@ public class AlbaSettingsScreen extends Screen {
                 .toList();
     }
 
+    private int[] previewSize() {
+        return AlbaHudOverlay.measure(textRenderer);
+    }
+
+    private int previewAreaY() {
+        return PANEL_Y + 112;
+    }
+
+    private int myListStartY() {
+        int[] preview = previewSize();
+        return previewAreaY() + preview[1] + 20;
+    }
+
     private int panelHeight() {
-        return 160 + Math.max(1, myHires().size()) * 18 + 30;
-    }
-
-    private int previewX() {
-        return PANEL_X + 8 + AlbaSettings.get().hudX / PREVIEW_SCALE_DIV;
-    }
-
-    private int previewY() {
-        return PANEL_Y + 118 + AlbaSettings.get().hudY / PREVIEW_SCALE_DIV;
+        return myListStartY() - PANEL_Y + Math.max(1, myHires().size()) * ROW_H + 40;
     }
 
     @Override
@@ -88,50 +92,55 @@ public class AlbaSettingsScreen extends Screen {
         context.fill(PANEL_X, PANEL_Y, PANEL_X + PANEL_WIDTH, PANEL_Y + height, COLOR_BG);
         drawBorder(context, PANEL_X, PANEL_Y, PANEL_WIDTH, height, COLOR_BORDER);
 
-        context.drawTextWithShadow(textRenderer, Text.literal("알바 설정"), PANEL_X + 8, PANEL_Y + 8, COLOR_TITLE);
+        context.drawTextWithShadow(textRenderer, Text.literal("알바 설정"), PANEL_X + 12, PANEL_Y + 12, COLOR_TITLE);
 
         AlbaSettings settings = AlbaSettings.get();
         visibleToggleButton.setMessage(Text.literal("표시: " + (settings.hudVisible ? "ON" : "OFF")));
-        context.drawTextWithShadow(textRenderer, Text.literal("알바 현황 표시"), PANEL_X + 8, PANEL_Y + 46, COLOR_MUTED);
+        context.drawTextWithShadow(textRenderer, Text.literal("알바 현황 표시"), PANEL_X + 12, PANEL_Y + 50, COLOR_MUTED);
 
         context.drawTextWithShadow(textRenderer, Text.literal("HUD 크기: " + settings.scalePercent + "%"),
-                PANEL_X + 8, PANEL_Y + 72, COLOR_MUTED);
+                PANEL_X + 12, PANEL_Y + 84, COLOR_MUTED);
 
-        context.drawTextWithShadow(textRenderer, Text.literal("위치: 아래 네모를 드래그하세요"), PANEL_X + 8, PANEL_Y + 100, COLOR_MUTED);
-        int pvX = previewX();
-        int pvY = previewY();
-        boolean hover = mouseX >= pvX && mouseX < pvX + PREVIEW_W && mouseY >= pvY && mouseY < pvY + PREVIEW_H;
-        context.fill(pvX, pvY, pvX + PREVIEW_W, pvY + PREVIEW_H, draggingPreview || hover ? 0xFF3B82F6 : 0xFF2A2A2A);
-        drawBorder(context, pvX, pvY, PREVIEW_W, PREVIEW_H, COLOR_BORDER);
+        context.drawTextWithShadow(textRenderer, Text.literal("위치 - 아래를 그대로 드래그해서 옮기세요"),
+                PANEL_X + 12, previewAreaY() - 14, COLOR_MUTED);
+
+        int pvX = PANEL_X + 12;
+        int pvY = previewAreaY();
+        int[] preview = previewSize();
+        boolean hover = mouseX >= pvX && mouseX < pvX + preview[0] && mouseY >= pvY && mouseY < pvY + preview[1];
+        if (draggingPreview || hover) {
+            drawBorder(context, pvX - 2, pvY - 2, preview[0] + 4, preview[1] + 4, 0xFF6FB0E8);
+        }
+        AlbaHudOverlay.draw(context, textRenderer, pvX, pvY);
 
         List<AlbaEntry> mine = myHires();
+        int rowY = myListStartY();
         if (mine.isEmpty()) {
             context.drawTextWithShadow(textRenderer, Text.literal("지금 고용 중인 알바가 없어요").formatted(Formatting.GRAY),
-                    PANEL_X + 8, PANEL_Y + 160, COLOR_MUTED);
+                    PANEL_X + 12, rowY + 4, COLOR_MUTED);
         } else {
-            int rowY = PANEL_Y + 160;
             for (AlbaEntry entry : mine) {
                 Identifier face = PlayerFaceFetcher.getFaceTexture(entry.employee());
                 if (face != null) {
-                    AlbaPlatform.drawFace(context, face, PANEL_X + 8, rowY, FACE_SIZE);
+                    AlbaPlatform.drawFace(context, face, PANEL_X + 12, rowY + 2, FACE_SIZE);
                 } else {
-                    context.fill(PANEL_X + 8, rowY, PANEL_X + 8 + FACE_SIZE, rowY + FACE_SIZE, 0xFF3C3C3C);
+                    context.fill(PANEL_X + 12, rowY + 2, PANEL_X + 12 + FACE_SIZE, rowY + 2 + FACE_SIZE, 0xFF3C3C3C);
                 }
 
                 AlbaJob job = AlbaJob.fromName(entry.job());
                 String jobLabel = job != null ? job.label() : "미지정";
                 context.drawTextWithShadow(textRenderer,
                         Text.literal(entry.employee() + " · " + jobLabel + " · " + relativeTime(entry.hiredAtMillis()) + " 고용"),
-                        PANEL_X + 8 + FACE_SIZE + 4, rowY + 2, COLOR_TITLE);
+                        PANEL_X + 12 + FACE_SIZE + 6, rowY + 6, COLOR_TITLE);
 
                 AlbaZone zone = job == AlbaJob.PUMPKIN ? parseZone(entry.zone()) : null;
                 if (zone != null) {
-                    int swatchX = PANEL_X + PANEL_WIDTH - 50 - ZONE_SWATCH_SIZE - 6;
-                    int swatchY = rowY + 2;
+                    int swatchX = PANEL_X + PANEL_WIDTH - 60 - ZONE_SWATCH_SIZE - 8;
+                    int swatchY = rowY + 7;
                     context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
                     drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
                 }
-                rowY += 18;
+                rowY += ROW_H;
             }
         }
 
@@ -177,9 +186,12 @@ public class AlbaSettingsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
-        int pvX = previewX();
-        int pvY = previewY();
-        if (click.x() >= pvX && click.x() < pvX + PREVIEW_W && click.y() >= pvY && click.y() < pvY + PREVIEW_H) {
+        int pvX = PANEL_X + 12;
+        int pvY = previewAreaY();
+        int[] preview = previewSize();
+        double mouseX = click.x();
+        double mouseY = click.y();
+        if (mouseX >= pvX && mouseX < pvX + preview[0] && mouseY >= pvY && mouseY < pvY + preview[1]) {
             draggingPreview = true;
             return true;
         }
@@ -190,8 +202,8 @@ public class AlbaSettingsScreen extends Screen {
     public boolean mouseDragged(Click click, double offsetX, double offsetY) {
         if (draggingPreview) {
             AlbaSettings settings = AlbaSettings.get();
-            settings.hudX = Math.max(0, settings.hudX + (int) (offsetX * PREVIEW_SCALE_DIV));
-            settings.hudY = Math.max(0, settings.hudY + (int) (offsetY * PREVIEW_SCALE_DIV));
+            settings.hudX = Math.max(0, settings.hudX + (int) offsetX);
+            settings.hudY = Math.max(0, settings.hudY + (int) offsetY);
             return true;
         }
         return super.mouseDragged(click, offsetX, offsetY);
