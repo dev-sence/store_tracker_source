@@ -12,6 +12,12 @@
       StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit);
       StoreTrackerRender.manualTransferItemOptions(data.inventory);
       StoreTrackerRender.manualTransferLog(data.events.filter((e) => e.action === 'HOLD' || e.action === 'RELEASE'));
+      const [albaStatus, albaHistory] = await Promise.all([
+        StoreTrackerApi.fetchAlbaStatus(currentMap),
+        StoreTrackerApi.fetchAlbaHistory(currentMap),
+      ]);
+      StoreTrackerRender.albaStatus(albaStatus);
+      StoreTrackerRender.albaHistory(albaHistory);
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }

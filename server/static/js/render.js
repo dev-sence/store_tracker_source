@@ -121,6 +121,55 @@ const StoreTrackerRender = {
     }
   },
 
+  albaJobLabel(job) {
+    const labels = {
+      PUMPKIN: '호박', WATERMELON: '수박', PLACE_BLOCK: '블럭설치', PLANT_SEED: '씨앗설치',
+      NETHER_WART: '네더사마귀', SUGAR_CANE: '사탕수수', COCOA: '코코아콩', BEETROOT: '사탕무',
+      WHEAT: '밀', POTATO: '감자', CARROT: '당근',
+    };
+    return labels[job] || (job || '-');
+  },
+
+  albaStatus(list) {
+    const body = document.getElementById('albaStatusBody');
+    if (!body) return;
+    const escape = this.escapeHtml;
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">지금 일하는 알바가 없습니다.</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map((h) => `
+      <tr>
+        <td>${escape(h.employer)}</td>
+        <td>${escape(h.employee)}</td>
+        <td>${escape(this.albaJobLabel(h.job))}</td>
+        <td>${escape(h.zone || '-')}</td>
+        <td class="text-secondary small">${this.formatTime(h.hired_at)}</td>
+      </tr>
+    `).join('');
+  },
+
+  albaHistory(list) {
+    const container = document.getElementById('albaHistoryList');
+    if (!container) return;
+    const escape = this.escapeHtml;
+    if (!list.length) {
+      container.innerHTML = '<div class="text-secondary small">아직 기록이 없습니다.</div>';
+      return;
+    }
+    container.innerHTML = list.map((h) => {
+      const fired = !!h.fired_at;
+      return `
+      <div class="panel p-2 px-3 d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge ${fired ? 'badge-take' : 'badge-deposit'} me-2">${fired ? '해고' : '고용'}</span>
+          <span class="small">${escape(h.employer)} → ${escape(h.employee)}${h.job ? ' · ' + escape(this.albaJobLabel(h.job)) : ''}</span>
+        </div>
+        <span class="text-secondary small">${this.formatTime(fired ? h.fired_at : h.hired_at)}</span>
+      </div>`;
+    }).join('');
+  },
+
   manualTransferLog(list) {
     const container = document.getElementById('manualTransferLog');
     if (!container) return;

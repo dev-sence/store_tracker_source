@@ -12,8 +12,8 @@ import discord_oauth
 import inventory
 from routes_public import _normalize_map_key
 from models import (
-    ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger, PublicItemType,
-    RequestLog, TrackedChest, UnassignedReturn, db,
+    AlbaHire, ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger,
+    PublicItemType, RequestLog, TrackedChest, UnassignedReturn, db,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -489,6 +489,25 @@ def admin_chest_logs():
             break
 
     return jsonify(result)
+
+
+@dashboard_bp.get("/api/admin/alba/status")
+@login_required
+def admin_alba_status():
+    """지금 일하는 중인 알바 목록 (fired_at이 비어있는 행 전부)."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    hires = AlbaHire.query.filter_by(map_key=map_key, fired_at=None).order_by(AlbaHire.hired_at.desc()).all()
+    return jsonify([h.to_dict() for h in hires])
+
+
+@dashboard_bp.get("/api/admin/alba/history")
+@login_required
+def admin_alba_history():
+    """고용/해고 이력 전체 (해고된 것 포함) - 최근 순."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    limit = min(int(request.args.get("limit", 100)), 500)
+    hires = AlbaHire.query.filter_by(map_key=map_key).order_by(AlbaHire.hired_at.desc()).limit(limit).all()
+    return jsonify([h.to_dict() for h in hires])
 
 
 @dashboard_bp.get("/api/admin/events/export")

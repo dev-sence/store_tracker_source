@@ -47,6 +47,10 @@
           <span class="material-symbols-outlined">swap_horiz</span>
           <span>수동 사용/반납</span>
         </div>
+        <div class="nav-item" data-section="farm">
+          <span class="material-symbols-outlined">agriculture</span>
+          <span>농사현황</span>
+        </div>
         {% if is_developer %}
         <div class="nav-item" data-section="admin">
           <span class="material-symbols-outlined">terminal</span>
@@ -217,6 +221,27 @@
             <tr><td colspan="3" class="text-center text-secondary py-4">불러오는 중...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="panel p-3 p-md-4" id="section-farm" style="display:none;">
+      <div class="section-title mb-3"><span class="material-symbols-outlined">agriculture</span>지금 일하는 알바</div>
+      <div style="max-height: 40vh; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-secondary small">
+              <th>고용주</th><th>알바</th><th>작업</th><th>구역</th><th>고용 시각</th>
+            </tr>
+          </thead>
+          <tbody id="albaStatusBody">
+            <tr><td colspan="5" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-title mb-3 mt-4"><span class="material-symbols-outlined">history</span>고용/해고 이력</div>
+      <div class="d-flex flex-column gap-2" id="albaHistoryList" style="max-height: 40vh; overflow-y: auto;">
+        <div class="text-secondary small">불러오는 중...</div>
       </div>
     </div>
 

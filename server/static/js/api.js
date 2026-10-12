@@ -11,6 +11,22 @@ const StoreTrackerApi = {
     return res.json();
   },
 
+  async fetchAlbaStatus(mapKey) {
+    const res = await fetch(`/api/admin/alba/status?map=${encodeURIComponent(mapKey)}`);
+    if (!res.ok) {
+      throw new Error(`request failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async fetchAlbaHistory(mapKey) {
+    const res = await fetch(`/api/admin/alba/history?map=${encodeURIComponent(mapKey)}`);
+    if (!res.ok) {
+      throw new Error(`request failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
   async updateProfileUsername(username) {
     const res = await fetch('/api/profile/username', {
       method: 'POST',
