@@ -28,7 +28,7 @@ public final class AlbaHudOverlay {
     // (바닐라 기본 폰트 기준으로 재기 때문에) 내용에 맞춰 패널 폭을 매번 다시 계산하던 방식이
     // 계속 아이콘과 글자가 겹치는 문제를 냈다. 그래서 폭은 고정값으로 박아두고, 혹시 닉네임이
     // 아주 길어도 trimToWidth로 잘라서 절대 아이콘을 침범하지 못하게 한다.
-    private static final int FIXED_WIDTH = 260;
+    private static final int FIXED_WIDTH = 200;
 
     private static final int COLOR_BG = 0xCC1B1B1B;
     private static final int COLOR_BORDER = 0x66FFFFFF;
