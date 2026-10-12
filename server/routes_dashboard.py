@@ -511,6 +511,20 @@ def admin_alba_history():
     return jsonify([h.to_dict() for h in hires])
 
 
+@dashboard_bp.get("/api/admin/alba/pending-records")
+@login_required
+def admin_alba_pending_records():
+    """해고됐는데 아직 "몇 상자"를 안 적은 기록 전체(고용주 무관) - 대시보드에서 누구나 대신
+    적어줄 수 있게. 인게임 쪽(/api/alba/pending-records)은 고용주 본인 것만 보여주는 것과 다름."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    hires = AlbaHire.query.filter(
+        AlbaHire.map_key == map_key,
+        AlbaHire.fired_at.isnot(None),
+        AlbaHire.box_count.is_(None),
+    ).order_by(AlbaHire.fired_at.desc()).limit(50).all()
+    return jsonify([h.to_dict() for h in hires])
+
+
 @dashboard_bp.get("/api/admin/alba/wage-rates")
 @login_required
 def admin_alba_wage_rates():

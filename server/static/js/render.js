@@ -193,6 +193,29 @@ const StoreTrackerRender = {
     }).join('');
   },
 
+  albaPendingRecords(list, wageRates) {
+    const body = document.getElementById('albaPendingRecordsBody');
+    if (!body) return;
+    const escape = this.escapeHtml;
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4">대기 중인 기록이 없습니다.</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map((h) => {
+      const defaultPrice = wageRates && wageRates[h.job] !== undefined ? wageRates[h.job] : 0;
+      return `
+      <tr data-hire-id="${h.id}">
+        <td>${this.albaAvatar(h.employer)}</td>
+        <td>${this.albaAvatar(h.employee)}</td>
+        <td class="small">${escape(this.albaJobLabel(h.job))}</td>
+        <td class="text-secondary small">${this.formatTime(h.fired_at)}</td>
+        <td><input type="number" class="form-control form-control-sm" min="0" step="1" data-field="box_count" placeholder="개수"></td>
+        <td><input type="number" class="form-control form-control-sm" min="0" step="1" data-field="unit_price" value="${defaultPrice}"></td>
+        <td><button class="btn btn-sm btn-accent pending-record-save-btn" data-hire-id="${h.id}">저장</button></td>
+      </tr>`;
+    }).join('');
+  },
+
   albaWageRates(rates) {
     const container = document.getElementById('albaWageRateList');
     if (!container) return;

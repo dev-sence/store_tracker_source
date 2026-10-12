@@ -236,6 +236,15 @@ const StoreTrackerApi = {
     return data;
   },
 
+  async fetchAlbaPendingRecords(mapKey) {
+    const res = await fetch(`/api/admin/alba/pending-records?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
   async fetchAlbaWageRates(mapKey) {
     const res = await fetch(`/api/admin/alba/wage-rates?map=${encodeURIComponent(mapKey)}`);
     const data = await res.json().catch(() => ({}));

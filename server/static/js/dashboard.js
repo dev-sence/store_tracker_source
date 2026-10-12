@@ -587,6 +587,41 @@
     btn.addEventListener('click', handleAddMember);
   }
 
+  async function loadAlbaPendingRecords() {
+    const body = document.getElementById('albaPendingRecordsBody');
+    if (!body || !currentMap) return;
+    try {
+      const [list, rates] = await Promise.all([
+        StoreTrackerApi.fetchAlbaPendingRecords(currentMap),
+        StoreTrackerApi.fetchAlbaWageRates(currentMap),
+      ]);
+      const rateMap = {};
+      rates.forEach((r) => { rateMap[r.job] = r.unit_price; });
+      StoreTrackerRender.albaPendingRecords(list, rateMap);
+      body.querySelectorAll('.pending-record-save-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('tr');
+          const boxCount = Number(row.querySelector('[data-field="box_count"]').value);
+          const unitPrice = Number(row.querySelector('[data-field="unit_price"]').value);
+          if (!Number.isFinite(boxCount) || boxCount < 0) {
+            StoreTrackerRender.toast('error', '상자 수를 입력해주세요');
+            return;
+          }
+          try {
+            await StoreTrackerApi.updateAlbaRecord(btn.dataset.hireId, { box_count: boxCount, unit_price: unitPrice });
+            StoreTrackerRender.toast('success', '기록됐습니다');
+            loadAlbaPendingRecords();
+            loadAlbaPeople();
+          } catch (err) {
+            Swal.fire({ icon: 'error', title: '저장 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+          }
+        });
+      });
+    } catch (err) {
+      body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">불러오기 실패</td></tr>';
+    }
+  }
+
   async function loadAlbaWageRates() {
     const container = document.getElementById('albaWageRateList');
     if (!container || !currentMap) return;
@@ -739,6 +774,7 @@
   loadChestLogs();
   loadLoginLogs();
   loadApplications();
+  loadAlbaPendingRecords();
   loadAlbaWageRates();
   loadAlbaPeople();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);

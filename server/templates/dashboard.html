@@ -51,6 +51,10 @@
           <span class="material-symbols-outlined">agriculture</span>
           <span>농사현황</span>
         </div>
+        <div class="nav-item" data-section="alba-records">
+          <span class="material-symbols-outlined">payments</span>
+          <span>알바 기록</span>
+        </div>
         {% if is_developer %}
         <div class="nav-item" data-section="admin">
           <span class="material-symbols-outlined">terminal</span>
@@ -263,12 +267,30 @@
       </div>
 
       <div class="subsection-title mb-3"><span class="material-symbols-outlined">history</span>고용/해고 이력</div>
-      <div class="d-flex flex-column gap-2 mb-4" id="albaHistoryList" style="max-height: 40vh; overflow-y: auto;">
+      <div class="d-flex flex-column gap-2" id="albaHistoryList" style="max-height: 40vh; overflow-y: auto;">
         <div class="text-secondary small">불러오는 중...</div>
       </div>
+    </div>
 
-      <div class="subsection-title mb-2"><span class="material-symbols-outlined">payments</span>작물별 상자당 단가</div>
-      <div class="text-secondary small mb-3">인게임에서 "몇 상자?"를 기록할 때 기본으로 쓰는 단가입니다. 로그인한 멤버라면 누구나 수정할 수 있습니다.</div>
+    <div class="panel p-3 p-md-4" id="section-alba-records" style="display:none;">
+      <div class="section-title panel-header-row"><span class="material-symbols-outlined">payments</span>기록 대기 중 (몇 상자?)</div>
+      <div class="text-secondary small mb-3">해고는 됐는데 아직 상자 수를 안 적은 기록입니다. 숫자를 입력하고 저장하면 단가(수정 가능)를 곱해 지급액이 계산됩니다.</div>
+      <div class="table-scroll mb-4" style="max-height: 35vh;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-secondary small">
+              <th>고용주</th><th>알바</th><th>작업</th><th>해고 시각</th>
+              <th style="width:110px;">상자 수</th><th style="width:110px;">단가</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="albaPendingRecordsBody">
+            <tr><td colspan="7" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="subsection-title mb-2"><span class="material-symbols-outlined">sell</span>작물별 상자당 단가</div>
+      <div class="text-secondary small mb-3">인게임/대시보드에서 "몇 상자?"를 기록할 때 기본으로 쓰는 단가입니다. 로그인한 멤버라면 누구나 수정할 수 있습니다.</div>
       <div class="d-flex flex-column gap-2 mb-4" id="albaWageRateList">
         <div class="text-secondary small">불러오는 중...</div>
       </div>
