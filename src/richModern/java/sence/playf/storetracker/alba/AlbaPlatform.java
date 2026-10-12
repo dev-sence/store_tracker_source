@@ -47,7 +47,12 @@ public final class AlbaPlatform {
     }
 
     public static void drawFace(DrawContext context, Identifier texture, int x, int y, int size) {
-        context.drawTexture(RenderPipelines.GUI_TEXTURED, texture, x, y, 0f, 0f, size, size, 8, 8);
+        // width/height(그릴 크기)와 regionWidth/regionHeight(텍스처에서 뗄 크기)를 따로 안 주는
+        // 10-인자 오버로드를 썼더니, 8x8 텍스처를 size(예: 14)만큼 그릴 때 UV가 0~size로 계산돼
+        // (U가 텍스처 폭을 넘어가면 기본적으로 반복/REPEAT 샘플링됨) 얼굴이 2x2로 타일링되어
+        // "머리 4개가 붙어있는" 것처럼 보였다. region을 텍스처 실제 크기(8,8)로 명시하는
+        // 12-인자 오버로드로 바꿔서 고침(그릴 크기는 size로 늘리고, 샘플은 8x8 한 장만).
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, texture, x, y, 0f, 0f, size, size, 8, 8, 8, 8);
     }
 
     /** playf에서 쓰던 NEXON 폰트(bold/medium)를 적용한 Text - 디자인을 최대한 비슷하게 맞추려고
