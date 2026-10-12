@@ -15,13 +15,14 @@ import java.util.List;
  * 나머지 10개 버전은 자동으로 빠진다(행렬/텍스처 API가 버전마다 달라서 전부 지원은 못 함). */
 public final class AlbaHudOverlay {
     private static final int MAX_ROWS = 6;
-    private static final int LINE_HEIGHT = 12;
-    private static final int ROW_HEIGHT = LINE_HEIGHT * 2 + 2;
-    private static final int PADDING = 8;
-    private static final int JOB_ICON_SIZE = 16;
-    private static final int ZONE_SWATCH_SIZE = 10;
-    private static final int FACE_SIZE = 16;
-    private static final int FACE_GAP = 3;
+    private static final int LINE_HEIGHT = 11;
+    private static final int ROW_HEIGHT = LINE_HEIGHT * 2 + 4;
+    private static final int PADDING = 7;
+    private static final int TITLE_GAP = 4;
+    private static final int JOB_ICON_SIZE = 14;
+    private static final int ZONE_SWATCH_SIZE = 8;
+    private static final int FACE_SIZE = 14;
+    private static final int FACE_GAP = 4;
 
     private static final int COLOR_BG = 0xCC1B1B1B;
     private static final int COLOR_BORDER = 0x66FFFFFF;
@@ -57,13 +58,14 @@ public final class AlbaHudOverlay {
     static int[] measure(TextRenderer tr) {
         List<AlbaEntry> entries = AlbaTracker.getCachedHires();
         boolean faces = AlbaPlatform.richFeaturesAvailable();
-        int textXOffset = faces ? FACE_SIZE * 2 + FACE_GAP + 4 : 0;
+        int textXOffset = faces ? FACE_SIZE + FACE_GAP : 0;
         int shown = Math.min(entries.size(), MAX_ROWS);
         int width = textXOffset + tr.getWidth("알바 현황") + PADDING * 2;
         int rowCount = entries.isEmpty() ? 1 : shown;
-        int height = PADDING * 2 + LINE_HEIGHT + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
+        int height = PADDING * 2 + LINE_HEIGHT + TITLE_GAP + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
         for (AlbaEntry e : entries.subList(0, shown)) {
-            int rowWidth = PADDING * 2 + textXOffset + tr.getWidth(e.employer() + " → " + e.employee())
+            String detail = e.employer() + " 고용 · " + relativeTime(e.hiredAtMillis());
+            int rowWidth = PADDING * 2 + textXOffset + Math.max(tr.getWidth(e.employee()), tr.getWidth(detail))
                     + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 8;
             width = Math.max(width, rowWidth);
         }
@@ -75,7 +77,7 @@ public final class AlbaHudOverlay {
     static void draw(DrawContext context, TextRenderer tr, int ox, int oy) {
         List<AlbaEntry> entries = AlbaTracker.getCachedHires();
         boolean faces = AlbaPlatform.richFeaturesAvailable();
-        int textXOffset = faces ? FACE_SIZE * 2 + FACE_GAP + 4 : 0;
+        int textXOffset = faces ? FACE_SIZE + FACE_GAP : 0;
 
         int[] size = measure(tr);
         int width = size[0];
@@ -87,8 +89,7 @@ public final class AlbaHudOverlay {
 
         int y = oy + PADDING;
         context.drawTextWithShadow(tr, AlbaPlatform.styledText("알바 현황", true, COLOR_TITLE), ox + PADDING, y, COLOR_TITLE);
-        context.fill(ox + PADDING, y + LINE_HEIGHT - 3, ox + width - PADDING, y + LINE_HEIGHT - 2, COLOR_ACCENT);
-        y += LINE_HEIGHT;
+        y += LINE_HEIGHT + TITLE_GAP;
 
         if (entries.isEmpty()) {
             context.drawTextWithShadow(tr, AlbaPlatform.styledText("고용된 알바가 없어요", false, COLOR_MUTED), ox + PADDING, y, COLOR_MUTED);
@@ -97,12 +98,11 @@ public final class AlbaHudOverlay {
                 int rowStartY = y;
                 if (faces) {
                     int faceY = rowStartY + (ROW_HEIGHT - FACE_SIZE) / 2;
-                    drawFace(context, e.employer(), ox + PADDING, faceY);
-                    drawFace(context, e.employee(), ox + PADDING + FACE_SIZE + FACE_GAP, faceY);
+                    drawFace(context, e.employee(), ox + PADDING, faceY);
                 }
 
                 int textX = ox + PADDING + textXOffset;
-                context.drawTextWithShadow(tr, AlbaPlatform.styledText(e.employer() + " → " + e.employee(), true, COLOR_TITLE), textX, y, COLOR_TITLE);
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(e.employee(), true, COLOR_TITLE), textX, y, COLOR_TITLE);
 
                 AlbaJob job = AlbaJob.fromName(e.job());
                 int iconX = ox + width - PADDING - JOB_ICON_SIZE;
@@ -118,7 +118,7 @@ public final class AlbaHudOverlay {
                     }
                 }
 
-                String detail = (job != null ? job.label() + " · " : "") + relativeTime(e.hiredAtMillis()) + " 고용";
+                String detail = e.employer() + " 고용" + (job != null ? " · " + job.label() : "") + " · " + relativeTime(e.hiredAtMillis());
                 context.drawTextWithShadow(tr, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
                 y += ROW_HEIGHT;
             }

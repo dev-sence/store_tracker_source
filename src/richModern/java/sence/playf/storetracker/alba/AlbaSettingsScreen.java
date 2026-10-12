@@ -3,24 +3,27 @@ package sence.playf.storetracker.alba;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** 1.21.11 전용 - playf의 FarmHudScreen과 같은 방식: 진짜 HUD 패널을 실제 화면 위치에 그대로
  * 그려서, 그 패널 자체를 드래그하면 바로 hudX/hudY가 바뀐다(설정창 안의 축소 미리보기가 아님).
  * 알바별 수정은 {@link AlbaEditScreen}에서 하고, 이 화면은 표시여부/크기/위치만 다룬다(2단계
  * 구조) - "알바 수정" 화면의 "⚙ 설정" 버튼으로 들어온다. */
 public class AlbaSettingsScreen extends Screen {
-    private static final int PANEL_WIDTH = 280;
+    private static final int PANEL_WIDTH = 210;
     private static final int COLOR_BG = 0xF01B1B1B;
     private static final int COLOR_BORDER = 0x80FFFFFF;
     private static final int COLOR_TITLE = 0xFFECECEC;
     private static final int COLOR_MUTED = 0xFFA0A0A0;
     private static final int COLOR_ACCENT = 0xFF6FB0E8;
     private static final int DIM_COLOR = 0x80000000;
-    private static final int PANEL_HEIGHT = 136;
+    private static final int PANEL_HEIGHT = 122;
 
-    private ButtonWidget visibleToggleButton;
+    private AlbaButton visibleToggleButton;
+    private final List<AlbaButton> albaButtons = new ArrayList<>();
     private boolean draggingHud = false;
     private int dragStartMouseX;
     private int dragStartMouseY;
@@ -32,11 +35,11 @@ public class AlbaSettingsScreen extends Screen {
     }
 
     private int panelX() {
-        return 20;
+        return 16;
     }
 
     private int panelY() {
-        return height - PANEL_HEIGHT - 20;
+        return height - PANEL_HEIGHT - 16;
     }
 
     @Override
@@ -45,20 +48,20 @@ public class AlbaSettingsScreen extends Screen {
         int px = panelX();
         int py = panelY();
 
-        visibleToggleButton = ButtonWidget.builder(Text.literal(""), b -> {
+        visibleToggleButton = new AlbaButton(px + PANEL_WIDTH - 86, py + 36, 76, 18, "", () -> {
             AlbaSettings settings = AlbaSettings.get();
             settings.hudVisible = !settings.hudVisible;
             settings.save();
-        }).dimensions(px + PANEL_WIDTH - 130, py + 40, 110, 22).build();
-        addDrawableChild(visibleToggleButton);
+        });
+        addButton(visibleToggleButton);
+        addButton(new AlbaButton(px + PANEL_WIDTH - 86, py + 68, 20, 18, "-", () -> AlbaSettings.get().adjustScale(-10)));
+        addButton(new AlbaButton(px + PANEL_WIDTH - 62, py + 68, 20, 18, "+", () -> AlbaSettings.get().adjustScale(10)));
+        addButton(new AlbaButton(px + PANEL_WIDTH - 48, py + PANEL_HEIGHT - 26, 40, 18, "닫기", this::close));
+    }
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("-"), b -> AlbaSettings.get().adjustScale(-10))
-                .dimensions(px + PANEL_WIDTH - 130, py + 74, 24, 22).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> AlbaSettings.get().adjustScale(10))
-                .dimensions(px + PANEL_WIDTH - 102, py + 74, 24, 22).build());
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("닫기"), b -> close())
-                .dimensions(px + PANEL_WIDTH - 64, py + PANEL_HEIGHT - 32, 52, 22).build());
+    private void addButton(AlbaButton button) {
+        albaButtons.add(button);
+        addDrawableChild(button.widget());
     }
 
     /** 지금 실제 화면에 떠 있는 HUD 패널의 화면상 사각형(스케일 적용 후) - 드래그 판정과 강조
@@ -95,16 +98,19 @@ public class AlbaSettingsScreen extends Screen {
         context.fill(px, py, px + PANEL_WIDTH, py + PANEL_HEIGHT, COLOR_BG);
         drawBorder(context, px, py, PANEL_WIDTH, PANEL_HEIGHT, COLOR_BORDER);
 
-        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("알바 설정", true, COLOR_TITLE), px + 12, py + 12, COLOR_TITLE);
-        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("위 패널을 그대로 드래그해서 옮기세요", false, COLOR_ACCENT),
-                px + 12, py + 26, COLOR_ACCENT);
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("알바 설정", true, COLOR_TITLE), px + 10, py + 10, COLOR_TITLE);
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("위 패널을 드래그해서 옮기세요", false, COLOR_ACCENT),
+                px + 10, py + 22, COLOR_ACCENT);
 
-        visibleToggleButton.setMessage(Text.literal("표시: " + (settings.hudVisible ? "ON" : "OFF")));
-        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("알바 현황 표시", false, COLOR_MUTED), px + 12, py + 46, COLOR_MUTED);
-        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("HUD 크기: " + settings.scalePercent + "%", false, COLOR_MUTED),
-                px + 12, py + 80, COLOR_MUTED);
+        visibleToggleButton.setLabel(settings.hudVisible ? "ON" : "OFF");
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("표시", false, COLOR_MUTED), px + 10, py + 42, COLOR_MUTED);
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("크기 " + settings.scalePercent + "%", false, COLOR_MUTED),
+                px + 10, py + 74, COLOR_MUTED);
 
         super.render(context, mouseX, mouseY, delta);
+        for (AlbaButton button : albaButtons) {
+            button.render(context);
+        }
     }
 
     private static void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {

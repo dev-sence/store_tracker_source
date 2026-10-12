@@ -3,7 +3,6 @@ package sence.playf.storetracker.alba;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -20,22 +19,23 @@ import java.util.List;
 public class AlbaGuiScreen extends Screen {
     private enum Stage { TOP, OTHER_CROP, ZONE }
 
-    private static final int BUTTON_WIDTH = 110;
-    private static final int BUTTON_HEIGHT = 20;
-    private static final int BUTTON_GAP = 4;
-    private static final int PANEL_WIDTH = 240;
-    private static final int PANEL_PADDING = 10;
+    private static final int BUTTON_WIDTH = 96;
+    private static final int BUTTON_HEIGHT = 18;
+    private static final int BUTTON_GAP = 3;
+    private static final int PANEL_WIDTH = 210;
+    private static final int PANEL_PADDING = 8;
     private static final int COLOR_BG = 0xE61B1B1B;
     private static final int COLOR_BORDER = 0x66FFFFFF;
     private static final int COLOR_TITLE = 0xFFECECEC;
-    private static final int ZONE_SWATCH_SIZE = 10;
-    private static final int FACE_SIZE = 16;
+    private static final int ZONE_SWATCH_SIZE = 8;
+    private static final int FACE_SIZE = 14;
 
     private final String employer;
     private final String employee;
     private Stage stage = Stage.TOP;
     private final List<ItemIconHint> iconHints = new ArrayList<>();
     private final List<ColorHint> colorHints = new ArrayList<>();
+    private final List<AlbaButton> albaButtons = new ArrayList<>();
 
     private record ItemIconHint(ItemStack icon, int x, int y) {
     }
@@ -132,28 +132,32 @@ public class AlbaGuiScreen extends Screen {
         clearChildren();
         iconHints.clear();
         colorHints.clear();
+        albaButtons.clear();
 
         int px = panelX();
         int py = panelY();
         int rowY = py + PANEL_PADDING + 16;
 
         if (stage != Stage.TOP) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("◀ 뒤로"), b -> {
-                        stage = Stage.TOP;
-                        rebuild();
-                    })
-                    .dimensions(px + PANEL_PADDING, rowY, BUTTON_WIDTH, BUTTON_HEIGHT).build());
+            AlbaButton back = new AlbaButton(px + PANEL_PADDING, rowY, BUTTON_WIDTH, BUTTON_HEIGHT, "◀ 뒤로", () -> {
+                stage = Stage.TOP;
+                rebuild();
+            });
+            albaButtons.add(back);
+            addDrawableChild(back.widget());
             rowY += BUTTON_HEIGHT + BUTTON_GAP;
         }
 
         for (Entry entry : currentEntries()) {
-            int buttonX = px + PANEL_PADDING + 14;
-            ButtonWidget button = ButtonWidget.builder(Text.literal("  " + entry.label()), b -> entry.onClick().run())
-                    .dimensions(buttonX, rowY, BUTTON_WIDTH + 40, BUTTON_HEIGHT).build();
-            addDrawableChild(button);
-            iconHints.add(new ItemIconHint(entry.icon(), px + PANEL_PADDING + 2, rowY + 2));
+            int buttonX = px + PANEL_PADDING;
+            int buttonWidth = BUTTON_WIDTH + 40;
+            AlbaButton button = new AlbaButton(buttonX, rowY, buttonWidth, BUTTON_HEIGHT, entry.label(), () -> entry.onClick().run())
+                    .withTextIndent(18);
+            albaButtons.add(button);
+            addDrawableChild(button.widget());
+            iconHints.add(new ItemIconHint(entry.icon(), buttonX + 2, rowY + 1));
             if (entry.swatchColor() != null) {
-                int swatchX = buttonX + BUTTON_WIDTH + 40 - ZONE_SWATCH_SIZE - 6;
+                int swatchX = buttonX + buttonWidth - ZONE_SWATCH_SIZE - 6;
                 int swatchY = rowY + (BUTTON_HEIGHT - ZONE_SWATCH_SIZE) / 2;
                 colorHints.add(new ColorHint(entry.swatchColor(), swatchX, swatchY));
             }
@@ -186,6 +190,9 @@ public class AlbaGuiScreen extends Screen {
 
         super.render(context, mouseX, mouseY, delta);
 
+        for (AlbaButton button : albaButtons) {
+            button.render(context);
+        }
         for (ItemIconHint hint : iconHints) {
             context.drawItem(hint.icon(), hint.x(), hint.y());
         }
