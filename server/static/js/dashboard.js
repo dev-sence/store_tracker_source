@@ -718,6 +718,45 @@
           }
         });
       });
+      document.querySelectorAll('.hire-edit-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const { value: form } = await Swal.fire({
+            title: '상자 수 / 단가 수정',
+            html: `
+              <input id="swalBoxCount" type="number" min="0" step="1" class="swal2-input" placeholder="상자 수" value="${btn.dataset.boxCount}">
+              <input id="swalUnitPrice" type="number" min="0" step="1" class="swal2-input" placeholder="단가(원/상자)" value="${btn.dataset.unitPrice}">
+            `,
+            showCancelButton: true,
+            confirmButtonText: '저장',
+            cancelButtonText: '취소',
+            ...StoreTrackerRender.swalTheme(),
+            preConfirm: () => {
+              const boxCount = Number(document.getElementById('swalBoxCount').value);
+              const unitPrice = Number(document.getElementById('swalUnitPrice').value);
+              if (!Number.isFinite(boxCount) || boxCount < 0) {
+                Swal.showValidationMessage('상자 수를 입력해주세요.');
+                return false;
+              }
+              if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+                Swal.showValidationMessage('단가를 입력해주세요.');
+                return false;
+              }
+              return { boxCount, unitPrice };
+            },
+          });
+          if (!form) return;
+          try {
+            await StoreTrackerApi.updateAlbaRecord(Number(btn.dataset.hireId), { box_count: form.boxCount, unit_price: form.unitPrice });
+            StoreTrackerRender.toast('success', '수정됐습니다');
+            loadAlbaPeople();
+            // Swal.fire를 새로 열면(수정 입력창) 기존 상세 모달이 닫혀버려서 refreshModal로
+            // "되돌아갈" 수 없다 - 상세 모달을 처음부터 다시 연다(최신 데이터로).
+            openAlbaPersonDetail(playerName);
+          } catch (err) {
+            Swal.fire({ icon: 'error', title: '수정 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+          }
+        });
+      });
       document.querySelectorAll('.hire-delete-btn').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const result = await Swal.fire({
@@ -732,8 +771,10 @@
           if (!result.isConfirmed) return;
           try {
             await StoreTrackerApi.deleteAlbaRecord(Number(btn.dataset.hireId));
-            await refreshModal();
             loadAlbaPeople();
+            // 삭제 확인 Swal이 상세 모달을 닫아버려서 refreshModal로 되돌아갈 수 없다 -
+            // 처음부터 다시 연다.
+            openAlbaPersonDetail(playerName);
           } catch (err) {
             StoreTrackerRender.toast('error', '삭제 실패');
           }

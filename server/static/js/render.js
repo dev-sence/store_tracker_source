@@ -265,6 +265,12 @@ const StoreTrackerRender = {
           <span>${escape(h.employer)} · ${escape(this.albaJobLabel(h.job))} · ${status}</span>
           <span class="d-flex align-items-center gap-2">
             <span>${escape(pay)}</span>
+            <button class="btn btn-sm btn-outline-light hire-edit-btn" data-hire-id="${h.id}"
+                    data-box-count="${h.box_count !== null && h.box_count !== undefined ? h.box_count : ''}"
+                    data-unit-price="${h.unit_price !== null && h.unit_price !== undefined ? h.unit_price : ''}"
+                    style="padding:0 6px;" title="상자 수/단가 수정">
+              <span class="material-symbols-outlined" style="font-size:.85rem; vertical-align:-1px;">edit</span>
+            </button>
             <button class="btn btn-sm btn-outline-light hire-delete-btn" data-hire-id="${h.id}" style="padding:0 6px;" title="이 고용 기록 삭제">×</button>
           </span>
         </div>`;
