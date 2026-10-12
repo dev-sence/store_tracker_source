@@ -15,8 +15,8 @@ import java.util.List;
  * 나머지 10개 버전은 자동으로 빠진다(행렬/텍스처 API가 버전마다 달라서 전부 지원은 못 함). */
 public final class AlbaHudOverlay {
     private static final int MAX_ROWS = 6;
-    private static final int LINE_HEIGHT = 11;
-    private static final int ROW_HEIGHT = LINE_HEIGHT * 2 + 4;
+    private static final int LINE_HEIGHT = 10;
+    private static final int ROW_HEIGHT = LINE_HEIGHT * 2 + 2;
     private static final int PADDING = 7;
     private static final int TITLE_GAP = 4;
     private static final int JOB_ICON_SIZE = 14;
@@ -64,8 +64,9 @@ public final class AlbaHudOverlay {
         int rowCount = entries.isEmpty() ? 1 : shown;
         int height = PADDING * 2 + LINE_HEIGHT + TITLE_GAP + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
         for (AlbaEntry e : entries.subList(0, shown)) {
-            String detail = e.employer() + " 고용 · " + relativeTime(e.hiredAtMillis());
-            int rowWidth = PADDING * 2 + textXOffset + Math.max(tr.getWidth(e.employee()), tr.getWidth(detail))
+            String title = e.employer() + " → " + e.employee();
+            String detail = detailText(e);
+            int rowWidth = PADDING * 2 + textXOffset + Math.max(tr.getWidth(title), tr.getWidth(detail))
                     + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 8;
             width = Math.max(width, rowWidth);
         }
@@ -102,7 +103,8 @@ public final class AlbaHudOverlay {
                 }
 
                 int textX = ox + PADDING + textXOffset;
-                context.drawTextWithShadow(tr, AlbaPlatform.styledText(e.employee(), true, COLOR_TITLE), textX, y, COLOR_TITLE);
+                String title = e.employer() + " → " + e.employee();
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(title, true, COLOR_TITLE), textX, y, COLOR_TITLE);
 
                 AlbaJob job = AlbaJob.fromName(e.job());
                 int iconX = ox + width - PADDING - JOB_ICON_SIZE;
@@ -118,8 +120,7 @@ public final class AlbaHudOverlay {
                     }
                 }
 
-                String detail = e.employer() + " 고용" + (job != null ? " · " + job.label() : "") + " · " + relativeTime(e.hiredAtMillis());
-                context.drawTextWithShadow(tr, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(detailText(e), false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
                 y += ROW_HEIGHT;
             }
             if (entries.size() > MAX_ROWS) {
@@ -127,6 +128,14 @@ public final class AlbaHudOverlay {
                         ox + PADDING, y, COLOR_ACCENT);
             }
         }
+    }
+
+    /** measure()와 draw()가 서로 다른 문자열로 폭을 계산/그리면 테두리보다 글자가 삐져나가는
+     * 문제가 생겨서("HUD 박스가 안 맞음"), 폭 계산과 실제 그리기가 항상 똑같은 문자열을 쓰도록
+     * 여기 하나로 모았다. */
+    private static String detailText(AlbaEntry e) {
+        AlbaJob job = AlbaJob.fromName(e.job());
+        return (job != null ? job.label() + " · " : "") + relativeTime(e.hiredAtMillis()) + " 고용";
     }
 
     private static void drawFace(DrawContext context, String playerName, int x, int y) {
