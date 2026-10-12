@@ -23,6 +23,12 @@ public final class AlbaHudOverlay {
     private static final int ZONE_SWATCH_SIZE = 8;
     private static final int FACE_SIZE = 14;
     private static final int FACE_GAP = 4;
+    private static final int ICON_GUTTER = 14;
+    // 닉네임 길이나 커스텀 폰트(NEXON)의 실제 글자 폭은 tr.getWidth(String)로 정확히 예측이 안 돼서
+    // (바닐라 기본 폰트 기준으로 재기 때문에) 내용에 맞춰 패널 폭을 매번 다시 계산하던 방식이
+    // 계속 아이콘과 글자가 겹치는 문제를 냈다. 그래서 폭은 고정값으로 박아두고, 혹시 닉네임이
+    // 아주 길어도 trimToWidth로 잘라서 절대 아이콘을 침범하지 못하게 한다.
+    private static final int FIXED_WIDTH = 260;
 
     private static final int COLOR_BG = 0xCC1B1B1B;
     private static final int COLOR_BORDER = 0x66FFFFFF;
@@ -57,20 +63,10 @@ public final class AlbaHudOverlay {
      * 영역을 정확히 알아야 해서 공개한다. */
     static int[] measure(TextRenderer tr) {
         List<AlbaEntry> entries = AlbaTracker.getCachedHires();
-        boolean faces = AlbaPlatform.richFeaturesAvailable();
-        int textXOffset = faces ? FACE_SIZE + FACE_GAP : 0;
         int shown = Math.min(entries.size(), MAX_ROWS);
-        int width = textXOffset + tr.getWidth("알바 현황") + PADDING * 2;
         int rowCount = entries.isEmpty() ? 1 : shown;
         int height = PADDING * 2 + LINE_HEIGHT + TITLE_GAP + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
-        for (AlbaEntry e : entries.subList(0, shown)) {
-            String title = e.employer() + " → " + e.employee();
-            String detail = detailText(e);
-            int rowWidth = PADDING * 2 + textXOffset + Math.max(tr.getWidth(title), tr.getWidth(detail))
-                    + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 18;
-            width = Math.max(width, rowWidth);
-        }
-        return new int[]{width, height};
+        return new int[]{FIXED_WIDTH, height};
     }
 
     /** 패키지 내 공개 - 알바 설정화면이 "지금 실제로 보이는 모습 그대로" 미리보기를 그릴 때도 쓴다
@@ -84,6 +80,7 @@ public final class AlbaHudOverlay {
         int width = size[0];
         int height = size[1];
         int shown = Math.min(entries.size(), MAX_ROWS);
+        int maxTextWidth = width - PADDING * 2 - textXOffset - JOB_ICON_SIZE - ZONE_SWATCH_SIZE - ICON_GUTTER;
 
         context.fill(ox, oy, ox + width, oy + height, COLOR_BG);
         drawBorder(context, ox, oy, width, height, COLOR_BORDER);
@@ -103,7 +100,9 @@ public final class AlbaHudOverlay {
                 }
 
                 int textX = ox + PADDING + textXOffset;
-                String title = e.employer() + " → " + e.employee();
+                // 닉네임이 아무리 길어도(+커스텀 폰트가 바닐라보다 넓게 그려도) 아이콘 영역을
+                // 절대 침범하지 않도록 잘라낸다 - 폭을 고정값으로 바꾼 것과 짝을 이루는 안전장치.
+                String title = tr.trimToWidth(e.employer() + " → " + e.employee(), maxTextWidth);
                 context.drawTextWithShadow(tr, AlbaPlatform.styledText(title, true, COLOR_TITLE), textX, y, COLOR_TITLE);
 
                 AlbaJob job = AlbaJob.fromName(e.job());
@@ -120,7 +119,8 @@ public final class AlbaHudOverlay {
                     }
                 }
 
-                context.drawTextWithShadow(tr, AlbaPlatform.styledText(detailText(e), false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
+                String detail = tr.trimToWidth(detailText(e), maxTextWidth);
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
                 y += ROW_HEIGHT;
             }
             if (entries.size() > MAX_ROWS) {
