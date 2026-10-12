@@ -10,10 +10,11 @@ from flask import Blueprint, Response, current_app, jsonify, redirect, render_te
 import discord_backoff
 import discord_oauth
 import inventory
+from routes_alba import DEFAULT_WAGE_RATES
 from routes_public import _normalize_map_key
 from models import (
-    AlbaHire, ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication, PlayerItemLedger,
-    PublicItemType, RequestLog, TrackedChest, UnassignedReturn, db,
+    AlbaHire, AlbaPersonNote, AlbaWageRate, ChestInventoryItem, Event, FeatureToggle, Member, MemberApplication,
+    PlayerItemLedger, PublicItemType, RequestLog, TrackedChest, UnassignedReturn, db,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -508,6 +509,167 @@ def admin_alba_history():
     limit = min(int(request.args.get("limit", 100)), 500)
     hires = AlbaHire.query.filter_by(map_key=map_key).order_by(AlbaHire.hired_at.desc()).limit(limit).all()
     return jsonify([h.to_dict() for h in hires])
+
+
+@dashboard_bp.get("/api/admin/alba/wage-rates")
+@login_required
+def admin_alba_wage_rates():
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    rates = {r.job: r for r in AlbaWageRate.query.filter_by(map_key=map_key).all()}
+    result = []
+    for job, default_price in DEFAULT_WAGE_RATES.items():
+        r = rates.pop(job, None)
+        result.append(r.to_dict() if r else {"job": job, "unit_price": default_price, "updated_by": None, "updated_at": None})
+    for r in rates.values():
+        result.append(r.to_dict())
+    return jsonify(result)
+
+
+@dashboard_bp.post("/api/admin/alba/wage-rates")
+@login_required
+def admin_set_alba_wage_rate():
+    """작업별 상자당 기본 단가를 설정/수정한다 - 로그인한 멤버라면 누구나 가능(개발자 전용 아님)."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    data = request.get_json(silent=True) or {}
+    job = (data.get("job") or "").strip()
+    if not job:
+        return jsonify({"error": "job is required"}), 400
+    try:
+        unit_price = int(data.get("unit_price"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "unit_price는 숫자여야 합니다"}), 400
+    if unit_price < 0:
+        return jsonify({"error": "unit_price는 0 이상이어야 합니다"}), 400
+
+    member = _current_member()
+    rate = AlbaWageRate.query.filter_by(map_key=map_key, job=job).first()
+    if rate is None:
+        rate = AlbaWageRate(map_key=map_key, job=job, unit_price=unit_price, updated_by=member.minecraft_username)
+        db.session.add(rate)
+    else:
+        rate.unit_price = unit_price
+        rate.updated_by = member.minecraft_username
+    db.session.commit()
+    return jsonify(rate.to_dict())
+
+
+@dashboard_bp.post("/api/admin/alba/records/<int:hire_id>")
+@login_required
+def admin_update_alba_record(hire_id):
+    """인게임에서 못 적었거나 잘못 적은 "몇 상자/단가"를 대시보드에서 나중에 고친다."""
+    hire = AlbaHire.query.get(hire_id)
+    if hire is None:
+        return jsonify({"error": "not found"}), 404
+    data = request.get_json(silent=True) or {}
+    member = _current_member()
+
+    if "box_count" in data:
+        try:
+            box_count = int(data["box_count"]) if data["box_count"] is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "box_count는 숫자여야 합니다"}), 400
+        if box_count is not None and box_count < 0:
+            return jsonify({"error": "box_count는 0 이상이어야 합니다"}), 400
+        hire.box_count = box_count
+    if "unit_price" in data:
+        try:
+            unit_price = int(data["unit_price"]) if data["unit_price"] is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "unit_price는 숫자여야 합니다"}), 400
+        if unit_price is not None and unit_price < 0:
+            return jsonify({"error": "unit_price는 0 이상이어야 합니다"}), 400
+        hire.unit_price = unit_price
+
+    hire.recorded_by = member.minecraft_username
+    hire.recorded_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return jsonify(hire.to_dict())
+
+
+@dashboard_bp.get("/api/admin/alba/people")
+@login_required
+def admin_alba_people():
+    """알바생별로 묶은 집계 - 총 기록 수/총 상자/총 지급액/시간당 상자 수."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    hires = AlbaHire.query.filter_by(map_key=map_key).all()
+
+    people = {}
+    for h in hires:
+        key = h.employee.lower()
+        entry = people.setdefault(key, {
+            "player_name": h.employee, "record_count": 0, "total_box_count": 0, "total_pay": 0,
+            "total_hours": 0.0, "last_activity": h.hired_at,
+        })
+        entry["record_count"] += 1
+        if h.hired_at > entry["last_activity"]:
+            entry["last_activity"] = h.hired_at
+        if h.fired_at and h.fired_at > entry["last_activity"]:
+            entry["last_activity"] = h.fired_at
+        if h.box_count is not None:
+            entry["total_box_count"] += h.box_count
+            if h.unit_price is not None:
+                entry["total_pay"] += h.box_count * h.unit_price
+            if h.fired_at:
+                entry["total_hours"] += max(0.0, (h.fired_at - h.hired_at).total_seconds() / 3600.0)
+
+    result = []
+    for entry in people.values():
+        boxes_per_hour = entry["total_box_count"] / entry["total_hours"] if entry["total_hours"] > 0 else None
+        result.append({
+            "player_name": entry["player_name"],
+            "record_count": entry["record_count"],
+            "total_box_count": entry["total_box_count"],
+            "total_pay": entry["total_pay"],
+            "boxes_per_hour": round(boxes_per_hour, 1) if boxes_per_hour is not None else None,
+            "last_activity": entry["last_activity"].isoformat(),
+        })
+    result.sort(key=lambda r: r["last_activity"], reverse=True)
+    return jsonify(result)
+
+
+@dashboard_bp.get("/api/admin/alba/people/<player_name>")
+@login_required
+def admin_alba_person_detail(player_name):
+    """한 알바생의 전체 고용 이력 + 코멘트 목록."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    hires = AlbaHire.query.filter(
+        AlbaHire.map_key == map_key, db.func.lower(AlbaHire.employee) == player_name.lower(),
+    ).order_by(AlbaHire.hired_at.desc()).all()
+    notes = AlbaPersonNote.query.filter(
+        AlbaPersonNote.map_key == map_key, db.func.lower(AlbaPersonNote.player_name) == player_name.lower(),
+    ).order_by(AlbaPersonNote.created_at.desc()).all()
+    return jsonify({
+        "player_name": player_name,
+        "hires": [h.to_dict() for h in hires],
+        "notes": [n.to_dict() for n in notes],
+    })
+
+
+@dashboard_bp.post("/api/admin/alba/people/<player_name>/notes")
+@login_required
+def admin_add_alba_person_note(player_name):
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    data = request.get_json(silent=True) or {}
+    comment = (data.get("comment") or "").strip()
+    if not comment:
+        return jsonify({"error": "comment is required"}), 400
+    member = _current_member()
+    note = AlbaPersonNote(map_key=map_key, player_name=player_name, comment=comment,
+                           created_by=member.minecraft_username)
+    db.session.add(note)
+    db.session.commit()
+    return jsonify(note.to_dict()), 201
+
+
+@dashboard_bp.delete("/api/admin/alba/notes/<int:note_id>")
+@login_required
+def admin_delete_alba_person_note(note_id):
+    note = AlbaPersonNote.query.get(note_id)
+    if note is None:
+        return jsonify({"error": "not found"}), 404
+    db.session.delete(note)
+    db.session.commit()
+    return "", 204
 
 
 @dashboard_bp.get("/api/admin/events/export")

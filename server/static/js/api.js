@@ -235,4 +235,78 @@ const StoreTrackerApi = {
     }
     return data;
   },
+
+  async fetchAlbaWageRates(mapKey) {
+    const res = await fetch(`/api/admin/alba/wage-rates?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async setAlbaWageRate(mapKey, job, unitPrice) {
+    const res = await fetch(`/api/admin/alba/wage-rates?map=${encodeURIComponent(mapKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job, unit_price: unitPrice }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async updateAlbaRecord(hireId, fields) {
+    const res = await fetch(`/api/admin/alba/records/${hireId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async fetchAlbaPeople(mapKey) {
+    const res = await fetch(`/api/admin/alba/people?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async fetchAlbaPersonDetail(mapKey, playerName) {
+    const res = await fetch(`/api/admin/alba/people/${encodeURIComponent(playerName)}?map=${encodeURIComponent(mapKey)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async addAlbaPersonNote(mapKey, playerName, comment) {
+    const res = await fetch(`/api/admin/alba/people/${encodeURIComponent(playerName)}/notes?map=${encodeURIComponent(mapKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async deleteAlbaPersonNote(noteId) {
+    const res = await fetch(`/api/admin/alba/notes/${noteId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+  },
 };

@@ -100,6 +100,7 @@
       ]);
       StoreTrackerRender.albaStatus(albaStatus);
       StoreTrackerRender.albaHistory(albaHistory);
+      loadAlbaPeople();
       if (manual) {
         StoreTrackerRender.toast('success', '새로고침 완료');
       }
@@ -586,6 +587,112 @@
     btn.addEventListener('click', handleAddMember);
   }
 
+  async function loadAlbaWageRates() {
+    const container = document.getElementById('albaWageRateList');
+    if (!container || !currentMap) return;
+    try {
+      const rates = await StoreTrackerApi.fetchAlbaWageRates(currentMap);
+      StoreTrackerRender.albaWageRates(rates);
+      container.querySelectorAll('.wage-save-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const job = btn.dataset.wageJob;
+          const input = container.querySelector(`input[data-wage-job="${job}"]`);
+          const value = Number(input.value);
+          if (!Number.isFinite(value) || value < 0) {
+            StoreTrackerRender.toast('error', '0 이상의 숫자를 입력해주세요');
+            return;
+          }
+          try {
+            await StoreTrackerApi.setAlbaWageRate(currentMap, job, value);
+            StoreTrackerRender.toast('success', '단가가 저장됐습니다');
+          } catch (err) {
+            Swal.fire({ icon: 'error', title: '저장 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+          }
+        });
+      });
+    } catch (err) {
+      container.innerHTML = '<div class="text-danger small">불러오기 실패</div>';
+    }
+  }
+
+  async function loadAlbaPeople() {
+    const body = document.getElementById('albaPeopleBody');
+    if (!body || !currentMap) return;
+    try {
+      const people = await StoreTrackerApi.fetchAlbaPeople(currentMap);
+      StoreTrackerRender.albaPeople(people);
+      body.querySelectorAll('.alba-person-row').forEach((row) => {
+        row.addEventListener('click', () => openAlbaPersonDetail(row.dataset.player));
+      });
+    } catch (err) {
+      body.innerHTML = '<tr><td colspan="6" class="text-danger text-center py-3">불러오기 실패</td></tr>';
+    }
+  }
+
+  async function openAlbaPersonDetail(playerName) {
+    let detail;
+    try {
+      detail = await StoreTrackerApi.fetchAlbaPersonDetail(currentMap, playerName);
+    } catch (err) {
+      StoreTrackerRender.toast('error', '불러오기 실패');
+      return;
+    }
+
+    async function refreshModal() {
+      detail = await StoreTrackerApi.fetchAlbaPersonDetail(currentMap, playerName);
+      const container = Swal.getHtmlContainer();
+      if (container) {
+        container.innerHTML = StoreTrackerRender.albaPersonDetailHtml(detail);
+        bindNoteDeleteButtons();
+      }
+    }
+
+    function bindNoteDeleteButtons() {
+      document.querySelectorAll('.note-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await StoreTrackerApi.deleteAlbaPersonNote(Number(btn.dataset.noteId));
+            await refreshModal();
+          } catch (err) {
+            StoreTrackerRender.toast('error', '삭제 실패');
+          }
+        });
+      });
+    }
+
+    Swal.fire({
+      title: playerName,
+      html: StoreTrackerRender.albaPersonDetailHtml(detail),
+      width: 480,
+      showCancelButton: true,
+      confirmButtonText: '코멘트 추가',
+      cancelButtonText: '닫기',
+      ...StoreTrackerRender.swalTheme(),
+      didOpen: () => {
+        bindNoteDeleteButtons();
+      },
+      preConfirm: async () => {
+        const input = document.getElementById('personNoteInput');
+        const comment = input ? input.value.trim() : '';
+        if (!comment) {
+          return false;
+        }
+        try {
+          await StoreTrackerApi.addAlbaPersonNote(currentMap, playerName, comment);
+        } catch (err) {
+          Swal.showValidationMessage(err.message);
+          return false;
+        }
+        return true;
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        StoreTrackerRender.toast('success', '코멘트가 추가됐습니다');
+        loadAlbaPeople();
+      }
+    });
+  }
+
   function bindLogout() {
     document.getElementById('logoutLink').addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -632,5 +739,7 @@
   loadChestLogs();
   loadLoginLogs();
   loadApplications();
+  loadAlbaWageRates();
+  loadAlbaPeople();
   setInterval(() => refresh(false), REFRESH_INTERVAL_MS);
 })();

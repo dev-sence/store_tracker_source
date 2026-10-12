@@ -263,8 +263,29 @@
       </div>
 
       <div class="subsection-title mb-3"><span class="material-symbols-outlined">history</span>고용/해고 이력</div>
-      <div class="d-flex flex-column gap-2" id="albaHistoryList" style="max-height: 40vh; overflow-y: auto;">
+      <div class="d-flex flex-column gap-2 mb-4" id="albaHistoryList" style="max-height: 40vh; overflow-y: auto;">
         <div class="text-secondary small">불러오는 중...</div>
+      </div>
+
+      <div class="subsection-title mb-2"><span class="material-symbols-outlined">payments</span>작물별 상자당 단가</div>
+      <div class="text-secondary small mb-3">인게임에서 "몇 상자?"를 기록할 때 기본으로 쓰는 단가입니다. 로그인한 멤버라면 누구나 수정할 수 있습니다.</div>
+      <div class="d-flex flex-column gap-2 mb-4" id="albaWageRateList">
+        <div class="text-secondary small">불러오는 중...</div>
+      </div>
+
+      <div class="subsection-title mb-3"><span class="material-symbols-outlined">groups</span>알바 기록 (사람별)</div>
+      <div class="table-scroll" style="max-height: 50vh;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-secondary small">
+              <th>알바</th><th class="text-end">기록 수</th><th class="text-end">총 상자</th>
+              <th class="text-end">총 지급액</th><th class="text-end">시간당 상자</th><th>최근 활동</th>
+            </tr>
+          </thead>
+          <tbody id="albaPeopleBody">
+            <tr><td colspan="6" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

@@ -290,6 +290,13 @@ class AlbaHire(db.Model):
     zone = db.Column(db.String(32), nullable=True)
     hired_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     fired_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # 해고 시(인게임) 또는 나중에(대시보드) 적는 "몇 상자 채웠는지"와 그때 적용한 상자당 단가.
+    # unit_price를 기록 시점 값으로 같이 저장해두는 이유: 나중에 맵 기본 단가가 바뀌어도 이미
+    # 끝난 기록의 지급액이 조용히 바뀌지 않게 하기 위함(과거 기록은 스냅샷처럼 고정).
+    box_count = db.Column(db.Integer, nullable=True)
+    unit_price = db.Column(db.Integer, nullable=True)
+    recorded_by = db.Column(db.String(32), nullable=True)
+    recorded_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     def to_dict(self):
         return {
@@ -300,4 +307,48 @@ class AlbaHire(db.Model):
             "zone": self.zone,
             "hired_at": self.hired_at.isoformat(),
             "fired_at": self.fired_at.isoformat() if self.fired_at else None,
+            "box_count": self.box_count,
+            "unit_price": self.unit_price,
+            "total_pay": self.box_count * self.unit_price if self.box_count is not None and self.unit_price is not None else None,
+            "recorded_by": self.recorded_by,
+            "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
+        }
+
+
+class AlbaWageRate(db.Model):
+    """작업(job)별 상자당 기본 단가 - 맵 전체 기본값이고, 기록할 때 그 건에 한해 덮어쓸 수 있다."""
+    __tablename__ = "alba_wage_rates"
+    __table_args__ = (db.UniqueConstraint("map_key", "job", name="uq_alba_wage_rate_map_job"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    map_key = db.Column(db.String(128), nullable=False, index=True)
+    job = db.Column(db.String(32), nullable=False)
+    unit_price = db.Column(db.Integer, nullable=False)
+    updated_by = db.Column(db.String(32), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {"job": self.job, "unit_price": self.unit_price, "updated_by": self.updated_by,
+                "updated_at": self.updated_at.isoformat()}
+
+
+class AlbaPersonNote(db.Model):
+    """특정 알바생에 대한 코멘트/메모 - 시간순으로 쌓인다(사람별 평판·특이사항 기록용). 대시보드
+    전용 기능이라 인게임에서는 안 건드린다."""
+    __tablename__ = "alba_person_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    map_key = db.Column(db.String(128), nullable=False, index=True)
+    player_name = db.Column(db.String(32), nullable=False, index=True)
+    comment = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.String(32), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "player_name": self.player_name,
+            "comment": self.comment,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat(),
         }

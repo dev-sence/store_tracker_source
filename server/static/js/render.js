@@ -130,20 +130,24 @@ const StoreTrackerRender = {
     return labels[job] || (job || '-');
   },
 
+  albaAvatar(name) {
+    const escape = this.escapeHtml;
+    return `<img class="avatar-sm me-1" src="https://mc-heads.net/avatar/${encodeURIComponent(name)}/24" onerror="this.style.display='none'"> ${escape(name)}`;
+  },
+
   albaStatus(list) {
     const body = document.getElementById('albaStatusBody');
     if (!body) return;
-    const escape = this.escapeHtml;
     if (!list.length) {
       body.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">지금 일하는 알바가 없습니다.</td></tr>';
       return;
     }
     body.innerHTML = list.map((h) => `
       <tr>
-        <td>${escape(h.employer)}</td>
-        <td>${escape(h.employee)}</td>
-        <td>${escape(this.albaJobLabel(h.job))}</td>
-        <td>${escape(h.zone || '-')}</td>
+        <td>${this.albaAvatar(h.employer)}</td>
+        <td>${this.albaAvatar(h.employee)}</td>
+        <td>${this.escapeHtml(this.albaJobLabel(h.job))}</td>
+        <td>${this.escapeHtml(h.zone || '-')}</td>
         <td class="text-secondary small">${this.formatTime(h.hired_at)}</td>
       </tr>
     `).join('');
@@ -165,7 +169,13 @@ const StoreTrackerRender = {
       const jobLabel = h.job ? ' · ' + this.albaJobLabel(h.job) : '';
       events.push({ type: 'hire', time: h.hired_at, employer: h.employer, employee: h.employee, jobLabel });
       if (h.fired_at) {
-        events.push({ type: 'fire', time: h.fired_at, employer: h.employer, employee: h.employee, jobLabel });
+        let pay = '';
+        if (h.box_count !== null && h.box_count !== undefined) {
+          pay = h.total_pay !== null && h.total_pay !== undefined
+            ? ` · ${h.box_count}상자 (${h.total_pay.toLocaleString()}원)`
+            : ` · ${h.box_count}상자`;
+        }
+        events.push({ type: 'fire', time: h.fired_at, employer: h.employer, employee: h.employee, jobLabel, pay });
       }
     }
     events.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -176,11 +186,81 @@ const StoreTrackerRender = {
       <div class="panel p-2 px-3 d-flex justify-content-between align-items-center">
         <div>
           <span class="badge ${fired ? 'badge-take' : 'badge-deposit'} me-2">${fired ? '해고' : '고용'}</span>
-          <span class="small">${escape(e.employer)} → ${escape(e.employee)}${escape(e.jobLabel)}</span>
+          <span class="small">${escape(e.employer)} → ${escape(e.employee)}${escape(e.jobLabel)}${escape(e.pay || '')}</span>
         </div>
         <span class="text-secondary small">${this.formatTime(e.time)}</span>
       </div>`;
     }).join('');
+  },
+
+  albaWageRates(rates) {
+    const container = document.getElementById('albaWageRateList');
+    if (!container) return;
+    const escape = this.escapeHtml;
+    container.innerHTML = rates.map((r) => `
+      <div class="d-flex align-items-center gap-2">
+        <span class="small" style="width:90px;">${escape(this.albaJobLabel(r.job))}</span>
+        <input type="number" class="form-control form-control-sm" style="width:90px;" min="0" step="1"
+               value="${r.unit_price}" data-wage-job="${escape(r.job)}">
+        <span class="text-secondary small">원/상자</span>
+        <button class="btn btn-sm btn-outline-light wage-save-btn" data-wage-job="${escape(r.job)}">저장</button>
+      </div>
+    `).join('');
+  },
+
+  albaPeople(list) {
+    const body = document.getElementById('albaPeopleBody');
+    if (!body) return;
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">아직 알바 기록이 없습니다.</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map((p) => `
+      <tr class="alba-person-row" data-player="${this.escapeHtml(p.player_name)}" style="cursor:pointer;">
+        <td>${this.albaAvatar(p.player_name)}</td>
+        <td class="text-end">${p.record_count}</td>
+        <td class="text-end">${p.total_box_count}</td>
+        <td class="text-end">${p.total_pay.toLocaleString()}원</td>
+        <td class="text-end">${p.boxes_per_hour !== null ? p.boxes_per_hour : '-'}</td>
+        <td class="text-secondary small">${this.formatTime(p.last_activity)}</td>
+      </tr>
+    `).join('');
+  },
+
+  albaPersonDetailHtml(detail) {
+    const escape = this.escapeHtml;
+    const hiresHtml = detail.hires.length
+      ? detail.hires.map((h) => {
+        const status = h.fired_at ? '해고' : '근무중';
+        const pay = h.box_count !== null && h.box_count !== undefined
+          ? `${h.box_count}상자${h.total_pay !== null ? ` (${h.total_pay.toLocaleString()}원)` : ''}`
+          : '-';
+        return `<div class="d-flex justify-content-between small border-bottom py-1">
+          <span>${escape(h.employer)} · ${escape(this.albaJobLabel(h.job))} · ${status}</span>
+          <span>${escape(pay)}</span>
+        </div>`;
+      }).join('')
+      : '<div class="text-secondary small">기록 없음</div>';
+
+    const notesHtml = detail.notes.length
+      ? detail.notes.map((n) => `
+        <div class="d-flex justify-content-between align-items-start small border-bottom py-1" data-note-id="${n.id}">
+          <div><div>${escape(n.comment)}</div><div class="text-secondary" style="font-size:.75rem;">${escape(n.created_by)} · ${this.formatTime(n.created_at)}</div></div>
+          <button class="btn btn-sm btn-outline-light note-delete-btn" data-note-id="${n.id}" style="padding:0 6px;">×</button>
+        </div>`).join('')
+      : '<div class="text-secondary small">코멘트 없음</div>';
+
+    return `
+      <div class="text-start">
+        <div class="fw-bold mb-1">고용 이력</div>
+        <div style="max-height:160px; overflow-y:auto;" class="mb-3">${hiresHtml}</div>
+        <div class="fw-bold mb-1">코멘트</div>
+        <div id="personNotesList" style="max-height:120px; overflow-y:auto;" class="mb-2">${notesHtml}</div>
+        <div class="d-flex gap-2">
+          <input type="text" id="personNoteInput" class="swal2-input" style="margin:0; flex:1;" placeholder="코멘트 추가">
+        </div>
+      </div>
+    `;
   },
 
   manualTransferLog(list) {
