@@ -524,6 +524,11 @@
   bindDetailedLogToggle();
   bindEventRowClicks();
   bindAddMemberButton();
+  const exportBtn = document.getElementById('exportEventsBtn');
+  if (exportBtn) {
+    exportBtn.href = `/api/admin/events/export?map=${encodeURIComponent(currentMap)}`;
+  }
+
   bindAddPublicItemButton();
   bindManualTransferButtons();
   bindLogout();

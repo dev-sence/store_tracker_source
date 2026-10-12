@@ -105,9 +105,14 @@
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="section-title"><span class="material-symbols-outlined">history</span>최근 입출고 로그</div>
         {% if is_developer %}
-        <label class="text-secondary small d-flex align-items-center gap-1" style="cursor:pointer;">
-          <input type="checkbox" id="detailedLogToggle"> 상세 보기
-        </label>
+        <div class="d-flex align-items-center gap-3">
+          <a class="btn btn-sm btn-outline-light" id="exportEventsBtn" href="#">
+            <span class="material-symbols-outlined" style="font-size:.9rem; vertical-align:-2px;">download</span> 전체 다운로드
+          </a>
+          <label class="text-secondary small d-flex align-items-center gap-1" style="cursor:pointer;">
+            <input type="checkbox" id="detailedLogToggle"> 상세 보기
+          </label>
+        </div>
         {% endif %}
       </div>
       <div style="max-height: 65vh; overflow-y: auto;">

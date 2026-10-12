@@ -1,9 +1,11 @@
+import csv
+import io
 import json
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 import discord_backoff
 import discord_oauth
@@ -487,6 +489,36 @@ def admin_chest_logs():
             break
 
     return jsonify(result)
+
+
+@dashboard_bp.get("/api/admin/events/export")
+@developer_required
+def admin_export_events():
+    """입출고 로그 전체를 처음부터 끝까지 CSV로 내려받는다 (화면의 최근 200건 제한과 무관)."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    query = Event.query.order_by(Event.id.asc())
+    if map_key:
+        query = query.filter_by(map_key=map_key)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "id", "received_at", "occurred_at", "minecraft_username", "action", "item_id", "item_name",
+        "count", "map_key", "chest_label", "dimension", "pos_x", "pos_y", "pos_z",
+    ])
+    for e in query.yield_per(500):
+        writer.writerow([
+            e.id, e.received_at.isoformat(), e.occurred_at.isoformat(), e.minecraft_username, e.action,
+            e.item_id, e.item_name, e.count, e.map_key, e.chest_label or "", e.dimension or "",
+            e.pos_x, e.pos_y, e.pos_z,
+        ])
+
+    filename = f"events_{map_key or 'all'}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @dashboard_bp.get("/api/admin/login-logs")
