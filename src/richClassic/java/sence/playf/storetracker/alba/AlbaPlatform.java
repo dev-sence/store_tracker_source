@@ -5,6 +5,9 @@ import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.texture.TextureManager;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
 import net.minecraft.util.Identifier;
 
 /** 1.21.4 전용 구현 - MatrixStack(push/translate/scale 3-arg)와 RenderLayer::getGuiTextured를 쓴다.
@@ -43,6 +46,13 @@ public final class AlbaPlatform {
 
     public static void drawFace(DrawContext context, Identifier texture, int x, int y, int size) {
         context.drawTexture(RenderLayer::getGuiTextured, texture, x, y, 0f, 0f, size, size, 8, 8);
+    }
+
+    /** playf에서 쓰던 NEXON 폰트(bold/medium)를 적용한 Text - 디자인을 최대한 비슷하게 맞추려고
+     * 포팅함. argbColor는 알파를 무시하고 RGB만 쓴다(음영은 drawTextWithShadow가 알아서 그림). */
+    public static Text styledText(String text, boolean bold, int argbColor) {
+        Identifier font = Identifier.of("sence_storetracker", bold ? "nexon_bold" : "nexon_medium");
+        return Text.literal(text).setStyle(Style.EMPTY.withFont(font).withColor(TextColor.fromRgb(argbColor & 0xFFFFFF)));
     }
 
     private AlbaPlatform() {

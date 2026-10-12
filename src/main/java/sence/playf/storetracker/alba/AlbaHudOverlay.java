@@ -86,11 +86,12 @@ public final class AlbaHudOverlay {
         drawBorder(context, ox, oy, width, height, COLOR_BORDER);
 
         int y = oy + PADDING;
-        context.drawTextWithShadow(tr, Text.literal("알바 현황"), ox + PADDING, y, COLOR_TITLE);
+        context.drawTextWithShadow(tr, AlbaPlatform.styledText("알바 현황", true, COLOR_TITLE), ox + PADDING, y, COLOR_TITLE);
+        context.fill(ox + PADDING, y + LINE_HEIGHT - 3, ox + width - PADDING, y + LINE_HEIGHT - 2, COLOR_ACCENT);
         y += LINE_HEIGHT;
 
         if (entries.isEmpty()) {
-            context.drawTextWithShadow(tr, Text.literal("고용된 알바가 없어요"), ox + PADDING, y, COLOR_MUTED);
+            context.drawTextWithShadow(tr, AlbaPlatform.styledText("고용된 알바가 없어요", false, COLOR_MUTED), ox + PADDING, y, COLOR_MUTED);
         } else {
             for (AlbaEntry e : entries.subList(0, shown)) {
                 int rowStartY = y;
@@ -101,7 +102,7 @@ public final class AlbaHudOverlay {
                 }
 
                 int textX = ox + PADDING + textXOffset;
-                context.drawTextWithShadow(tr, Text.literal(e.employer() + " → " + e.employee()), textX, y, COLOR_TITLE);
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(e.employer() + " → " + e.employee(), true, COLOR_TITLE), textX, y, COLOR_TITLE);
 
                 AlbaJob job = AlbaJob.fromName(e.job());
                 int iconX = ox + width - PADDING - JOB_ICON_SIZE;
@@ -118,11 +119,11 @@ public final class AlbaHudOverlay {
                 }
 
                 String detail = (job != null ? job.label() + " · " : "") + relativeTime(e.hiredAtMillis()) + " 고용";
-                context.drawTextWithShadow(tr, Text.literal(detail), textX, y + LINE_HEIGHT, COLOR_MUTED);
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
                 y += ROW_HEIGHT;
             }
             if (entries.size() > MAX_ROWS) {
-                context.drawTextWithShadow(tr, Text.literal("+ " + (entries.size() - MAX_ROWS) + "개 더"),
+                context.drawTextWithShadow(tr, AlbaPlatform.styledText("+ " + (entries.size() - MAX_ROWS) + "개 더", false, COLOR_ACCENT),
                         ox + PADDING, y, COLOR_ACCENT);
             }
         }

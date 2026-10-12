@@ -3,6 +3,7 @@ package sence.playf.storetracker.alba;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.TextureManager;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 /**
@@ -28,6 +29,12 @@ public final class AlbaPlatform {
     }
 
     public static void drawFace(DrawContext context, Identifier texture, int x, int y, int size) {
+    }
+
+    /** 기본 구현은 커스텀 폰트를 지원하지 않아 그냥 평범한 글자를 돌려준다(색은 호출부가
+     * drawTextWithShadow의 color 인자로 직접 입힌다). */
+    public static Text styledText(String text, boolean bold, int argbColor) {
+        return Text.literal(text);
     }
 
     private AlbaPlatform() {

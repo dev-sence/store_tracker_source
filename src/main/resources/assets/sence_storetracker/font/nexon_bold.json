@@ -1,0 +1,12 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "sence_storetracker:nexon_bold.ttf",
+      "shift": [0.0, 0.0],
+      "size": 11.0,
+      "oversample": 2.0,
+      "skip": []
+    }
+  ]
+}

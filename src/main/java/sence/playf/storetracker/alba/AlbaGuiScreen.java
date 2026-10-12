@@ -182,7 +182,7 @@ public class AlbaGuiScreen extends Screen {
             }
             titleX += FACE_SIZE + 6;
         }
-        context.drawTextWithShadow(textRenderer, Text.literal(title), titleX, py + PANEL_PADDING, COLOR_TITLE);
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(title, true, COLOR_TITLE), titleX, py + PANEL_PADDING, COLOR_TITLE);
 
         super.render(context, mouseX, mouseY, delta);
 
