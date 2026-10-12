@@ -5,6 +5,10 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sence.playf.storetracker.alba.AlbaHireDetector;
+import sence.playf.storetracker.alba.AlbaHudOverlay;
+import sence.playf.storetracker.alba.AlbaSettingsCommand;
+import sence.playf.storetracker.alba.AlbaTracker;
 import sence.playf.storetracker.auth.MemberGate;
 import sence.playf.storetracker.build.BuildInfo;
 import sence.playf.storetracker.command.ChestAddCommand;
@@ -34,6 +38,10 @@ public class StoreTrackerClient implements ClientModInitializer {
         PublicItemDisplay.register();
         VersionCommand.register();
 
+        AlbaHireDetector.register();
+        AlbaHudOverlay.register();
+        AlbaSettingsCommand.register();
+
         if (BuildInfo.isDevBuild()) {
             ChestAddCommand.register();
             ItemResetCommand.register();
@@ -57,13 +65,19 @@ public class StoreTrackerClient implements ClientModInitializer {
             if (config.serverAddress.isBlank() || config.serverAddress.equalsIgnoreCase(currentAddress)) {
                 MemberGate.runGateFlowAsync();
             }
+            AlbaTracker.pollNow();
         });
 
         // 상자 상호작용 없이도 보유 장부가 계속 최신으로 유지되게 주기적으로 다시 받아온다.
         int[] tickCounter = {0};
+        int[] albaTickCounter = {0};
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null) {
                 return;
+            }
+            if (++albaTickCounter[0] >= 200) { // 20틱/초 * 10초 - HUD가 너무 늦게 안 따라오게 짧은 주기로.
+                albaTickCounter[0] = 0;
+                AlbaTracker.pollNow();
             }
             if (++tickCounter[0] < 1200) { // 20틱/초 * 60초
                 return;
