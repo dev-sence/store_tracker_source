@@ -22,6 +22,18 @@ def _active_hire(map_key, employer, employee):
     ).first()
 
 
+def _active_hire_by_employee(map_key, employee):
+    """해고 메시지에 찍히는 "해고한 사람"이 실제 고용주(employer)와 다를 수 있어서(고용주 본인이
+    아닌 다른 운영자/목격자가 플러그인 명령으로 대신 해고하는 경우) employer를 맞춰서 찾으면 매칭에
+    실패해 해고가 조용히 무시되는 버그가 있었다. 해고는 employee 기준으로만 찾는다(같은 사람이
+    동시에 활성 고용이 여러 건일 일은 없으므로, 혹시 데이터가 꼬여 여러 건이면 가장 최근 것)."""
+    return AlbaHire.query.filter(
+        AlbaHire.map_key == map_key,
+        db.func.lower(AlbaHire.employee) == employee.lower(),
+        AlbaHire.fired_at.is_(None),
+    ).order_by(AlbaHire.hired_at.desc()).first()
+
+
 @alba_bp.post("/hire")
 def hire():
     data = _parse_encrypted_body()
@@ -70,23 +82,24 @@ def fire():
         return jsonify({"error": "missing fields"}), 400
 
     username = data["username"]
-    employer = data["employer"]
     employee = data["employee"]
     # 해고 메시지엔 누가 해고했는지 그대로 적혀 있어서, 그걸 목격한 등록 멤버라면 누구든(고용주 본인이
     # 아니어도, 고용주가 접속 중이 아니어도) 신고할 수 있다 - 그래서 고용과 달리 본인 확인을 안 한다.
+    # data["employer"]는 "해고를 실행한 사람"일 뿐 실제 고용주가 아닐 수 있어서(운영자가 대신
+    # 해고하는 경우 등) 조회에는 쓰지 않는다 - employee 기준으로만 활성 고용을 찾는다.
     member = Member.query.filter_by(minecraft_username=username).first()
     if member is None:
         return jsonify({"status": "not_found"}), 404
 
     map_key = _normalize_map_key(data["map_key"])
-    existing = _active_hire(map_key, employer, employee)
+    existing = _active_hire_by_employee(map_key, employee)
     if existing is None:
-        _dev_log("alba-fire", username, f"이미 해고 처리됨 (무시): {employer} -> {employee}", data)
+        _dev_log("alba-fire", username, f"이미 해고 처리됐거나 활성 고용 없음 (무시): {employee}", data)
         return jsonify({"status": "ok", "already_fired": True}), 202
 
     existing.fired_at = datetime.now(timezone.utc)
     db.session.commit()
-    _dev_log("alba-fire", username, f"해고 기록됨: {employer} -> {employee}", data)
+    _dev_log("alba-fire", username, f"해고 기록됨: {existing.employer} -> {employee}", data)
     return jsonify({"status": "ok", "hire": existing.to_dict()}), 202
 
 

@@ -168,6 +168,55 @@
     releaseBtn.addEventListener('click', () => submit('RELEASE'));
   }
 
+  function bindAlbaStatusActions() {
+    const body = document.getElementById('albaStatusBody');
+    if (!body) return;
+    body.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('.alba-fire-btn');
+      if (!btn) return;
+      const result = await Swal.fire({
+        title: '이 알바를 해고할까요?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '해고',
+        cancelButtonText: '취소',
+        ...StoreTrackerRender.swalTheme(),
+      });
+      if (!result.isConfirmed) return;
+      try {
+        await StoreTrackerApi.fireAlba(btn.dataset.hireId);
+        StoreTrackerRender.toast('success', '해고 처리됐습니다');
+        refresh(false);
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: '처리 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+      }
+    });
+  }
+
+  function bindAlbaHireForm() {
+    const btn = document.getElementById('albaHireBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const employer = document.getElementById('albaHireEmployer').value.trim();
+      const employee = document.getElementById('albaHireEmployee').value.trim();
+      const job = document.getElementById('albaHireJob').value;
+      if (!employer || !employee) {
+        StoreTrackerRender.toast('error', '고용주/알바 닉네임을 입력해주세요');
+        return;
+      }
+      try {
+        await StoreTrackerApi.hireAlba(currentMap, employer, employee, job || null);
+        StoreTrackerRender.toast('success', '고용됐습니다');
+        document.getElementById('albaHireEmployer').value = '';
+        document.getElementById('albaHireEmployee').value = '';
+        document.getElementById('albaHireJob').value = '';
+        refresh(false);
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: '고용 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+      }
+    });
+  }
+
   function bindEventRowClicks() {
     document.getElementById('eventsBody').addEventListener('click', async (ev) => {
       const row = ev.target.closest('.event-row');
@@ -850,6 +899,8 @@
   bindManualTransferButtons();
   bindLogFilter();
   bindExportRangeButton();
+  bindAlbaStatusActions();
+  bindAlbaHireForm();
   bindClearUnassignedReturnsButton();
   bindLogout();
   refresh(false);

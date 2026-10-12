@@ -253,15 +253,47 @@
 
     <div class="panel p-3 p-md-4" id="section-farm" style="display:none;">
       <div class="section-title panel-header-row"><span class="material-symbols-outlined">agriculture</span>지금 일하는 알바</div>
+
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-6 col-md-3">
+          <label class="form-label small text-secondary mb-1">고용주</label>
+          <input type="text" class="form-control form-control-sm" id="albaHireEmployer" placeholder="닉네임">
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label small text-secondary mb-1">알바</label>
+          <input type="text" class="form-control form-control-sm" id="albaHireEmployee" placeholder="닉네임">
+        </div>
+        <div class="col-8 col-md-3">
+          <label class="form-label small text-secondary mb-1">작업</label>
+          <select class="form-select form-select-sm" id="albaHireJob">
+            <option value="">미지정</option>
+            <option value="PUMPKIN">호박</option>
+            <option value="WATERMELON">수박</option>
+            <option value="PLACE_BLOCK">블럭설치</option>
+            <option value="PLANT_SEED">씨앗설치</option>
+            <option value="NETHER_WART">네더사마귀</option>
+            <option value="SUGAR_CANE">사탕수수</option>
+            <option value="COCOA">코코아콩</option>
+            <option value="BEETROOT">사탕무</option>
+            <option value="WHEAT">밀</option>
+            <option value="POTATO">감자</option>
+            <option value="CARROT">당근</option>
+          </select>
+        </div>
+        <div class="col-4 col-md-3">
+          <button type="button" class="btn btn-accent btn-sm w-100" id="albaHireBtn">고용</button>
+        </div>
+      </div>
+
       <div class="table-scroll mb-4" style="max-height: 40vh;">
         <table class="table table-hover align-middle mb-0">
           <thead>
             <tr class="text-secondary small">
-              <th>고용주</th><th>알바</th><th>작업</th><th>구역</th><th>고용 시각</th>
+              <th>고용주</th><th>알바</th><th>작업</th><th>구역</th><th>고용 시각</th><th></th>
             </tr>
           </thead>
           <tbody id="albaStatusBody">
-            <tr><td colspan="5" class="text-center text-secondary py-4">불러오는 중...</td></tr>
+            <tr><td colspan="6" class="text-center text-secondary py-4">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>

@@ -525,6 +525,45 @@ def admin_alba_pending_records():
     return jsonify([h.to_dict() for h in hires])
 
 
+@dashboard_bp.post("/api/admin/alba/hire")
+@login_required
+def admin_alba_hire():
+    """웹 대시보드에서 바로 고용 - 인게임 명령어 없이도 기록을 시작할 수 있게. 이미 활성 고용이
+    있으면(인게임에서 먼저 했을 수도 있으니) 새로 안 만들고 그대로 돌려준다."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    data = request.get_json(silent=True) or {}
+    employer = (data.get("employer") or "").strip()
+    employee = (data.get("employee") or "").strip()
+    if not employer or not employee:
+        return jsonify({"error": "employer/employee가 필요합니다"}), 400
+
+    existing = AlbaHire.query.filter(
+        AlbaHire.map_key == map_key,
+        db.func.lower(AlbaHire.employer) == employer.lower(),
+        db.func.lower(AlbaHire.employee) == employee.lower(),
+        AlbaHire.fired_at.is_(None),
+    ).first()
+    if existing is None:
+        existing = AlbaHire(map_key=map_key, employer=employer, employee=employee,
+                             job=(data.get("job") or None), zone=(data.get("zone") or None))
+        db.session.add(existing)
+        db.session.commit()
+    return jsonify(existing.to_dict()), 201
+
+
+@dashboard_bp.post("/api/admin/alba/hires/<int:hire_id>/fire")
+@login_required
+def admin_alba_fire(hire_id):
+    """웹 대시보드에서 바로 해고 - 인게임 명령어 없이도 끝낼 수 있게."""
+    hire = AlbaHire.query.get(hire_id)
+    if hire is None:
+        return jsonify({"error": "not found"}), 404
+    if hire.fired_at is None:
+        hire.fired_at = datetime.now(timezone.utc)
+        db.session.commit()
+    return jsonify(hire.to_dict())
+
+
 @dashboard_bp.get("/api/admin/alba/wage-rates")
 @login_required
 def admin_alba_wage_rates():

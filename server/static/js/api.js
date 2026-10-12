@@ -236,6 +236,28 @@ const StoreTrackerApi = {
     return data;
   },
 
+  async hireAlba(mapKey, employer, employee, job) {
+    const res = await fetch(`/api/admin/alba/hire?map=${encodeURIComponent(mapKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employer, employee, job }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
+  async fireAlba(hireId) {
+    const res = await fetch(`/api/admin/alba/hires/${hireId}/fire`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+    return data;
+  },
+
   async fetchAlbaPendingRecords(mapKey) {
     const res = await fetch(`/api/admin/alba/pending-records?map=${encodeURIComponent(mapKey)}`);
     const data = await res.json().catch(() => ({}));

@@ -139,7 +139,7 @@ const StoreTrackerRender = {
     const body = document.getElementById('albaStatusBody');
     if (!body) return;
     if (!list.length) {
-      body.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">지금 일하는 알바가 없습니다.</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">지금 일하는 알바가 없습니다.</td></tr>';
       return;
     }
     body.innerHTML = list.map((h) => `
@@ -149,6 +149,7 @@ const StoreTrackerRender = {
         <td>${this.escapeHtml(this.albaJobLabel(h.job))}</td>
         <td>${this.escapeHtml(h.zone || '-')}</td>
         <td class="text-secondary small">${this.formatTime(h.hired_at)}</td>
+        <td><button class="btn btn-sm btn-outline-light alba-fire-btn" data-hire-id="${h.id}">해고</button></td>
       </tr>
     `).join('');
   },
