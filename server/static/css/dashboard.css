@@ -157,14 +157,20 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 10px;
+  padding: 10px 10px 10px 12px;
   border-radius: 4px;
   cursor: pointer;
   color: var(--text-color);
-  font-size: .92rem;
+  font-size: .94rem;
+  position: relative;
+  border-left: 3px solid transparent;
 }
 .nav-item:hover { background-color: var(--hover-bg); }
-.nav-item.active { background-color: var(--hover-bg); font-weight: 700; }
+.nav-item.active {
+  background-color: var(--hover-bg);
+  font-weight: 700;
+  border-left-color: var(--accent);
+}
 .nav-item.active .material-symbols-outlined { color: var(--accent); }
 
 .close-menu {
@@ -213,29 +219,61 @@ a { color: inherit; }
 .stat-card {
   background-color: var(--panel-bg);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 1rem 1.2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease,
+              background-color var(--transition-speed) ease, border-color var(--transition-speed) ease;
 }
-.stat-card .label { color: var(--text-secondary); font-size: .78rem; font-weight: 500; }
-.stat-card .value { font-size: 1.7rem; font-weight: 700; }
-.stat-card .material-symbols-outlined { font-size: 1.6rem; color: var(--accent); }
+.stat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0, 0, 0, .08); }
+.stat-card .label { color: var(--text-secondary); font-size: .78rem; font-weight: 500; margin-bottom: 2px; }
+.stat-card .value { font-size: 1.8rem; font-weight: 700; line-height: 1.15; }
+.stat-card .icon-badge {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  flex-shrink: 0;
+}
+.stat-card .icon-badge .material-symbols-outlined { font-size: 1.4rem; color: var(--accent); }
 
 .panel {
   background-color: var(--panel-bg);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .05);
+}
+
+.panel-header-row {
+  padding-bottom: .85rem;
+  margin-bottom: 1rem !important;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .section-title {
   font-weight: 700;
+  font-size: 1.02rem;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .section-title .material-symbols-outlined { color: var(--accent); }
+
+.subsection-title {
+  font-weight: 700;
+  font-size: .95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: .5rem;
+  padding-bottom: .5rem;
+  border-top: 1px dashed var(--border-color);
+}
+.subsection-title .material-symbols-outlined { color: var(--accent); font-size: 1.15rem; }
+.subsection-title:first-child { border-top: none; padding-top: 0; }
 
 .live-dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
@@ -252,10 +290,33 @@ a { color: inherit; }
 .badge-take { background: var(--take); }
 .badge-deposit { background: var(--deposit); }
 
-.table > :not(caption) > * > * { background: transparent; color: var(--text-color); border-color: var(--border-color); }
+.table > :not(caption) > * > * { background: transparent; color: var(--text-color); border-color: var(--border-color); padding-top: .65rem; padding-bottom: .65rem; }
 .table-hover > tbody > tr:hover > * { background: var(--hover-bg); }
 .event-row:hover > * { outline: 1px solid var(--accent); outline-offset: -1px; }
 .avatar-sm { width: 22px; height: 22px; border-radius: 4px; image-rendering: pixelated; }
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background-color: var(--panel-bg);
+  z-index: 1;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-size: .72rem;
+  padding-top: .5rem;
+  padding-bottom: .5rem;
+  border-bottom: 2px solid var(--border-color) !important;
+}
+
+.table-scroll {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: auto;
+}
+.table-scroll .table { margin-bottom: 0; }
+.table-scroll .table thead th:first-child { border-top-left-radius: 5px; }
+.table-scroll .table thead th:last-child { border-top-right-radius: 5px; }
 
 .form-select, .form-control {
   background-color: var(--bg-color);
