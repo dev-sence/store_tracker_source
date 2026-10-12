@@ -64,7 +64,9 @@ public class AlbaEditScreen extends Screen {
         clearChildren();
         albaButtons.clear();
 
-        addButton(new AlbaButton(PANEL_X + PANEL_WIDTH - 26, PANEL_Y + 8, 18, 18, "⚙",
+        // "⚙" 기어 기호는 NEXON 폰트에 글리프가 없어서 네모(토푸)로 깨져 보였다 - 폰트가 아는
+        // 평범한 한글 텍스트로 바꿈.
+        addButton(new AlbaButton(PANEL_X + PANEL_WIDTH - 50, PANEL_Y + 8, 42, 18, "설정",
                 () -> client.setScreen(new AlbaSettingsScreen())));
 
         int rowY = PANEL_Y + LIST_START_Y;
