@@ -67,10 +67,8 @@ def fire():
     username = data["username"]
     employer = data["employer"]
     employee = data["employee"]
-    if username.lower() != employer.lower():
-        _dev_log("alba-fire", username, "거부: 본인이 고용주가 아닌 해고 보고", data)
-        return jsonify({"error": "employer mismatch"}), 403
-
+    # 해고 메시지엔 누가 해고했는지 그대로 적혀 있어서, 그걸 목격한 등록 멤버라면 누구든(고용주 본인이
+    # 아니어도, 고용주가 접속 중이 아니어도) 신고할 수 있다 - 그래서 고용과 달리 본인 확인을 안 한다.
     member = Member.query.filter_by(minecraft_username=username).first()
     if member is None:
         return jsonify({"status": "not_found"}), 404
