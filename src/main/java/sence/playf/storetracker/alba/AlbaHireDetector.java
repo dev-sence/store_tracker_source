@@ -28,7 +28,10 @@ public final class AlbaHireDetector {
     private static final Pattern FIRE_COMMAND = Pattern.compile("^알바\\s+해고\\s+(\\S+)\\s*$");
     private static final Pattern HIRE_BROADCAST =
             Pattern.compile("(\\S+)님이\\s+(\\S+)님을\\s+알바생으로\\s+추가했어요");
-    private static final String FIRE_KEYWORD = "해고";
+    // "{해고한 사람}님이 알바생 {알바}님을 해고했어요." - 메시지에서 해고한 사람을 직접 뽑아내므로,
+    // 고용주 본인이 아니라 그걸 본 아무 클라이언트나(심지어 고용주가 접속 안 해 있어도) 신고할 수 있다.
+    private static final Pattern FIRE_BROADCAST =
+            Pattern.compile("(\\S+)님이\\s+알바생\\s+(\\S+)님을\\s+해고했어요");
 
     private static final Map<String, Long> recentHireEvents = new ConcurrentHashMap<>();
     private static final long HIRE_DEDUP_WINDOW_MILLIS = 3_000L;
@@ -73,10 +76,8 @@ public final class AlbaHireDetector {
         }
         String text = message.getString();
         String localName = client.player.getName().getString();
-        if (!containsIgnoreCase(text, localName)) {
-            return;
-        }
 
+        // 고용은 고용주 본인 화면에서만 처리한다 (고용 직후 본인 작업선택 GUI를 띄워야 하므로).
         Matcher hireMatcher = HIRE_BROADCAST.matcher(text);
         if (hireMatcher.find()) {
             String broadcastEmployer = hireMatcher.group(1);
@@ -87,24 +88,16 @@ public final class AlbaHireDetector {
             return;
         }
 
-        if (!text.contains(FIRE_KEYWORD)) {
-            return;
+        // 해고는 메시지에 누가 해고했는지 그대로 적혀 있으므로, 고용주가 아니거나 접속 중이 아니어도
+        // 그 메시지를 본 아무 클라이언트나(모드 쓰는 사람 누구든) 신고할 수 있다.
+        Matcher fireMatcher = FIRE_BROADCAST.matcher(text);
+        if (fireMatcher.find()) {
+            String firer = fireMatcher.group(1);
+            String employee = fireMatcher.group(2);
+            LOGGER.info("[알바] 해고 감지(메시지, 목격자={}): {} -> {}", localName, firer, employee);
+            AlbaTracker.getBridge().fire(firer, employee);
+            AlbaTracker.forcePollNow();
         }
-        for (AlbaEntry entry : AlbaTracker.getCachedHires()) {
-            if (!entry.employer().equalsIgnoreCase(localName)) {
-                continue;
-            }
-            if (containsIgnoreCase(text, entry.employee())) {
-                LOGGER.info("[알바] 해고 감지(메시지): {} -> {}", localName, entry.employee());
-                AlbaTracker.getBridge().fire(localName, entry.employee());
-                AlbaTracker.forcePollNow();
-                return;
-            }
-        }
-    }
-
-    private static boolean containsIgnoreCase(String haystack, String needle) {
-        return haystack.toLowerCase().contains(needle.toLowerCase());
     }
 
     /** 명령어 경로/메시지 경로가 같은 고용을 중복 보고하지 않게 하고, 둘 다 같은 선택 GUI를 두 번

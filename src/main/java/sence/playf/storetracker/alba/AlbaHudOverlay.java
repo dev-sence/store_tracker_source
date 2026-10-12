@@ -15,10 +15,16 @@ import java.util.List;
 public final class AlbaHudOverlay {
     private static final int MAX_ROWS = 6;
     private static final int LINE_HEIGHT = 10;
-    private static final int PADDING = 4;
+    private static final int ROW_HEIGHT = LINE_HEIGHT * 2;
+    private static final int PADDING = 5;
     private static final int JOB_ICON_SIZE = 10;
-    private static final int COLOR_BG = 0xA0101010;
-    private static final int COLOR_BORDER = 0xFF4A4A4A;
+    private static final int ZONE_SWATCH_SIZE = 6;
+
+    private static final int COLOR_BG = 0xCC1B1B1B;
+    private static final int COLOR_BORDER = 0x66FFFFFF;
+    private static final int COLOR_TITLE = 0xFFECECEC;
+    private static final int COLOR_MUTED = 0xFFA0A0A0;
+    private static final int COLOR_ACCENT = 0xFF6FB0E8;
 
     private AlbaHudOverlay() {
     }
@@ -44,10 +50,10 @@ public final class AlbaHudOverlay {
         int shown = Math.min(entries.size(), MAX_ROWS);
         int width = tr.getWidth("알바 현황") + PADDING * 2;
         int rowCount = entries.isEmpty() ? 1 : shown;
-        int height = PADDING * 2 + LINE_HEIGHT + rowCount * LINE_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
+        int height = PADDING * 2 + LINE_HEIGHT + rowCount * ROW_HEIGHT + (entries.size() > MAX_ROWS ? LINE_HEIGHT : 0);
 
         for (AlbaEntry e : entries.subList(0, shown)) {
-            int rowWidth = PADDING * 2 + tr.getWidth(e.employer() + " -> " + e.employee()) + JOB_ICON_SIZE + 4;
+            int rowWidth = PADDING * 2 + tr.getWidth(e.employer() + " → " + e.employee()) + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 8;
             width = Math.max(width, rowWidth);
         }
 
@@ -55,25 +61,67 @@ public final class AlbaHudOverlay {
         drawBorder(context, ox, oy, width, height, COLOR_BORDER);
 
         int y = oy + PADDING;
-        context.drawTextWithShadow(tr, Text.literal("알바 현황"), ox + PADDING, y, 0xFFFFFFFF);
+        context.drawTextWithShadow(tr, Text.literal("알바 현황"), ox + PADDING, y, COLOR_TITLE);
         y += LINE_HEIGHT;
 
         if (entries.isEmpty()) {
-            context.drawTextWithShadow(tr, Text.literal("고용된 알바가 없어요"), ox + PADDING, y, 0xFFAAAAAA);
+            context.drawTextWithShadow(tr, Text.literal("고용된 알바가 없어요"), ox + PADDING, y, COLOR_MUTED);
         } else {
             for (AlbaEntry e : entries.subList(0, shown)) {
-                context.drawTextWithShadow(tr, Text.literal(e.employer() + " -> " + e.employee()), ox + PADDING, y, 0xFFFFFFFF);
+                context.drawTextWithShadow(tr, Text.literal(e.employer() + " → " + e.employee()), ox + PADDING, y, COLOR_TITLE);
+
                 AlbaJob job = AlbaJob.fromName(e.job());
+                int iconX = ox + width - PADDING - JOB_ICON_SIZE;
                 if (job != null) {
-                    context.drawItem(new ItemStack(job.icon()), ox + width - JOB_ICON_SIZE - PADDING, y - 1);
+                    context.drawItem(new ItemStack(job.icon()), iconX, y - 1);
+                    AlbaZone zone = parseZone(e.zone());
+                    if (zone != null) {
+                        int swatchX = iconX - ZONE_SWATCH_SIZE - 3;
+                        int swatchY = y + (LINE_HEIGHT - ZONE_SWATCH_SIZE) / 2;
+                        context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
+                        drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
+                    }
                 }
-                y += LINE_HEIGHT;
+
+                String detail = (job != null ? job.label() + " · " : "") + relativeTime(e.hiredAtMillis()) + " 고용";
+                context.drawTextWithShadow(tr, Text.literal(detail), ox + PADDING, y + LINE_HEIGHT, COLOR_MUTED);
+                y += ROW_HEIGHT;
             }
             if (entries.size() > MAX_ROWS) {
                 context.drawTextWithShadow(tr, Text.literal("+ " + (entries.size() - MAX_ROWS) + "개 더"),
-                        ox + PADDING, y, 0xFF74C0FC);
+                        ox + PADDING, y, COLOR_ACCENT);
             }
         }
+    }
+
+    private static AlbaZone parseZone(String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return AlbaZone.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String relativeTime(long hiredAtMillis) {
+        if (hiredAtMillis <= 0L) {
+            return "방금";
+        }
+        long deltaSeconds = Math.max(0L, (System.currentTimeMillis() - hiredAtMillis) / 1000L);
+        if (deltaSeconds < 60L) {
+            return "방금";
+        }
+        long minutes = deltaSeconds / 60L;
+        if (minutes < 60L) {
+            return minutes + "분 전";
+        }
+        long hours = minutes / 60L;
+        if (hours < 24L) {
+            return hours + "시간 전";
+        }
+        return (hours / 24L) + "일 전";
     }
 
     private static void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {

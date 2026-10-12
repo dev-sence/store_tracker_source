@@ -24,15 +24,21 @@ public class AlbaGuiScreen extends Screen {
     private static final int BUTTON_GAP = 4;
     private static final int PANEL_WIDTH = 240;
     private static final int PANEL_PADDING = 10;
-    private static final int COLOR_BG = 0xF0101010;
-    private static final int COLOR_BORDER = 0xFF4A4A4A;
+    private static final int COLOR_BG = 0xE61B1B1B;
+    private static final int COLOR_BORDER = 0x66FFFFFF;
+    private static final int COLOR_TITLE = 0xFFECECEC;
+    private static final int ZONE_SWATCH_SIZE = 10;
 
     private final String employer;
     private final String employee;
     private Stage stage = Stage.TOP;
     private final List<ItemIconHint> iconHints = new ArrayList<>();
+    private final List<ColorHint> colorHints = new ArrayList<>();
 
     private record ItemIconHint(ItemStack icon, int x, int y) {
+    }
+
+    private record ColorHint(int color, int x, int y) {
     }
 
     public static void openForNewHire(String employer, String employee) {
@@ -68,7 +74,7 @@ public class AlbaGuiScreen extends Screen {
         return PANEL_PADDING * 2 + 16 + rows * (BUTTON_HEIGHT + BUTTON_GAP);
     }
 
-    private record Entry(ItemStack icon, String label, Runnable onClick) {
+    private record Entry(ItemStack icon, String label, Integer swatchColor, Runnable onClick) {
     }
 
     private List<Entry> currentEntries() {
@@ -82,7 +88,7 @@ public class AlbaGuiScreen extends Screen {
     private List<Entry> mapJobs(AlbaJob[] jobs) {
         List<Entry> list = new ArrayList<>();
         for (AlbaJob job : jobs) {
-            list.add(new Entry(new ItemStack(job.icon()), job.label(), () -> onJobClicked(job)));
+            list.add(new Entry(new ItemStack(job.icon()), job.label(), null, () -> onJobClicked(job)));
         }
         return list;
     }
@@ -91,7 +97,7 @@ public class AlbaGuiScreen extends Screen {
         AlbaSettings settings = AlbaSettings.get();
         List<Entry> list = new ArrayList<>();
         for (AlbaZone zone : AlbaZone.values()) {
-            list.add(new Entry(new ItemStack(zone.icon()), settings.zoneLabel(zone), () -> onZoneClicked(zone)));
+            list.add(new Entry(new ItemStack(zone.icon()), settings.zoneLabel(zone), zone.color(), () -> onZoneClicked(zone)));
         }
         return list;
     }
@@ -123,6 +129,7 @@ public class AlbaGuiScreen extends Screen {
     private void rebuild() {
         clearChildren();
         iconHints.clear();
+        colorHints.clear();
 
         int px = panelX();
         int py = panelY();
@@ -143,6 +150,11 @@ public class AlbaGuiScreen extends Screen {
                     .dimensions(buttonX, rowY, BUTTON_WIDTH + 40, BUTTON_HEIGHT).build();
             addDrawableChild(button);
             iconHints.add(new ItemIconHint(entry.icon(), px + PANEL_PADDING + 2, rowY + 2));
+            if (entry.swatchColor() != null) {
+                int swatchX = buttonX + BUTTON_WIDTH + 40 - ZONE_SWATCH_SIZE - 6;
+                int swatchY = rowY + (BUTTON_HEIGHT - ZONE_SWATCH_SIZE) / 2;
+                colorHints.add(new ColorHint(entry.swatchColor(), swatchX, swatchY));
+            }
             rowY += BUTTON_HEIGHT + BUTTON_GAP;
         }
     }
@@ -157,12 +169,16 @@ public class AlbaGuiScreen extends Screen {
 
         String title = stage == Stage.TOP ? employee + " 작업 선택"
                 : stage == Stage.OTHER_CROP ? "기타작물 선택" : "작업 구역 선택";
-        context.drawTextWithShadow(textRenderer, Text.literal(title), px + PANEL_PADDING, py + PANEL_PADDING, 0xFFFFFFFF);
+        context.drawTextWithShadow(textRenderer, Text.literal(title), px + PANEL_PADDING, py + PANEL_PADDING, COLOR_TITLE);
 
         super.render(context, mouseX, mouseY, delta);
 
         for (ItemIconHint hint : iconHints) {
             context.drawItem(hint.icon(), hint.x(), hint.y());
+        }
+        for (ColorHint hint : colorHints) {
+            context.fill(hint.x(), hint.y(), hint.x() + ZONE_SWATCH_SIZE, hint.y() + ZONE_SWATCH_SIZE, hint.color());
+            drawBorder(context, hint.x(), hint.y(), ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
         }
     }
 

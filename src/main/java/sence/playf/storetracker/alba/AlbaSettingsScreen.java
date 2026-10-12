@@ -18,8 +18,11 @@ public class AlbaSettingsScreen extends Screen {
     private static final int PANEL_Y = 20;
     private static final int PANEL_WIDTH = 260;
     private static final int NUDGE_STEP = 4;
-    private static final int COLOR_BG = 0xF0101010;
-    private static final int COLOR_BORDER = 0xFF4A4A4A;
+    private static final int COLOR_BG = 0xE61B1B1B;
+    private static final int COLOR_BORDER = 0x66FFFFFF;
+    private static final int COLOR_TITLE = 0xFFECECEC;
+    private static final int COLOR_MUTED = 0xFFA0A0A0;
+    private static final int ZONE_SWATCH_SIZE = 8;
 
     private ButtonWidget visibleToggleButton;
 
@@ -78,31 +81,69 @@ public class AlbaSettingsScreen extends Screen {
         context.fill(PANEL_X, PANEL_Y, PANEL_X + PANEL_WIDTH, PANEL_Y + height, COLOR_BG);
         drawBorder(context, PANEL_X, PANEL_Y, PANEL_WIDTH, height, COLOR_BORDER);
 
-        context.drawTextWithShadow(textRenderer, Text.literal("알바 설정"), PANEL_X + 8, PANEL_Y + 8, 0xFFFFFFFF);
+        context.drawTextWithShadow(textRenderer, Text.literal("알바 설정"), PANEL_X + 8, PANEL_Y + 8, COLOR_TITLE);
 
         AlbaSettings settings = AlbaSettings.get();
         visibleToggleButton.setMessage(Text.literal("표시: " + (settings.hudVisible ? "ON" : "OFF")));
-        context.drawTextWithShadow(textRenderer, Text.literal("알바 현황 표시"), PANEL_X + 8, PANEL_Y + 46, 0xFFAAAAAA);
+        context.drawTextWithShadow(textRenderer, Text.literal("알바 현황 표시"), PANEL_X + 8, PANEL_Y + 46, COLOR_MUTED);
 
         context.drawTextWithShadow(textRenderer, Text.literal("위치 (지금: " + settings.hudX + ", " + settings.hudY + ")"),
-                PANEL_X + 8, PANEL_Y + 96, 0xFFAAAAAA);
+                PANEL_X + 8, PANEL_Y + 96, COLOR_MUTED);
 
         List<AlbaEntry> mine = myHires();
         if (mine.isEmpty()) {
             context.drawTextWithShadow(textRenderer, Text.literal("지금 고용 중인 알바가 없어요").formatted(Formatting.GRAY),
-                    PANEL_X + 8, PANEL_Y + 150, 0xFFAAAAAA);
+                    PANEL_X + 8, PANEL_Y + 150, COLOR_MUTED);
         } else {
             int rowY = PANEL_Y + 150;
             for (AlbaEntry entry : mine) {
                 AlbaJob job = AlbaJob.fromName(entry.job());
                 String jobLabel = job != null ? job.label() : "미지정";
                 context.drawTextWithShadow(textRenderer,
-                        Text.literal(entry.employee() + " · " + jobLabel), PANEL_X + 8, rowY + 4, 0xFFFFFFFF);
+                        Text.literal(entry.employee() + " · " + jobLabel + " · " + relativeTime(entry.hiredAtMillis()) + " 고용"),
+                        PANEL_X + 8, rowY + 4, COLOR_TITLE);
+                AlbaZone zone = job == AlbaJob.PUMPKIN ? parseZone(entry.zone()) : null;
+                if (zone != null) {
+                    int swatchX = PANEL_X + PANEL_WIDTH - 50 - ZONE_SWATCH_SIZE - 6;
+                    int swatchY = rowY + 4;
+                    context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
+                    drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
+                }
                 rowY += 18;
             }
         }
 
         super.render(context, mouseX, mouseY, delta);
+    }
+
+    private static AlbaZone parseZone(String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return AlbaZone.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String relativeTime(long hiredAtMillis) {
+        if (hiredAtMillis <= 0L) {
+            return "방금";
+        }
+        long deltaSeconds = Math.max(0L, (System.currentTimeMillis() - hiredAtMillis) / 1000L);
+        if (deltaSeconds < 60L) {
+            return "방금";
+        }
+        long minutes = deltaSeconds / 60L;
+        if (minutes < 60L) {
+            return minutes + "분 전";
+        }
+        long hours = minutes / 60L;
+        if (hours < 24L) {
+            return hours + "시간 전";
+        }
+        return (hours / 24L) + "일 전";
     }
 
     private static void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {
