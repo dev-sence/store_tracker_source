@@ -102,7 +102,7 @@ public final class AlbaHudOverlay {
                 int textX = ox + PADDING + textXOffset;
                 // 닉네임이 아무리 길어도(+커스텀 폰트가 바닐라보다 넓게 그려도) 아이콘 영역을
                 // 절대 침범하지 않도록 잘라낸다 - 폭을 고정값으로 바꾼 것과 짝을 이루는 안전장치.
-                String title = tr.trimToWidth(e.employer() + " → " + e.employee(), maxTextWidth);
+                String title = trimWithEllipsis(tr, e.employer() + " → " + e.employee(), maxTextWidth);
                 context.drawTextWithShadow(tr, AlbaPlatform.styledText(title, true, COLOR_TITLE), textX, y, COLOR_TITLE);
 
                 AlbaJob job = AlbaJob.fromName(e.job());
@@ -119,7 +119,7 @@ public final class AlbaHudOverlay {
                     }
                 }
 
-                String detail = tr.trimToWidth(detailText(e), maxTextWidth);
+                String detail = trimWithEllipsis(tr, detailText(e), maxTextWidth);
                 context.drawTextWithShadow(tr, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, y + LINE_HEIGHT, COLOR_MUTED);
                 y += ROW_HEIGHT;
             }
@@ -128,6 +128,17 @@ public final class AlbaHudOverlay {
                         ox + PADDING, y, COLOR_ACCENT);
             }
         }
+    }
+
+    /** 폭이 넘치면 그냥 잘라내지 않고 "..."을 붙여서 "짤렸다"는 게 눈에 보이게 한다. */
+    private static String trimWithEllipsis(TextRenderer tr, String text, int maxWidth) {
+        if (tr.getWidth(text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "...";
+        int ellipsisWidth = tr.getWidth(ellipsis);
+        String trimmed = tr.trimToWidth(text, Math.max(0, maxWidth - ellipsisWidth));
+        return trimmed + ellipsis;
     }
 
     /** measure()와 draw()가 서로 다른 문자열로 폭을 계산/그리면 테두리보다 글자가 삐져나가는
