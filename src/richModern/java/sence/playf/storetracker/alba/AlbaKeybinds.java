@@ -25,7 +25,7 @@ public final class AlbaKeybinds {
     public static void tick(MinecraftClient client) {
         while (openSettingsKey.wasPressed()) {
             if (client.currentScreen == null) {
-                client.setScreen(new AlbaSettingsScreen());
+                client.setScreen(new AlbaEditScreen());
             }
         }
     }

@@ -18,7 +18,7 @@ public final class AlbaSettingsCommand {
         MinecraftClient client = MinecraftClient.getInstance();
         client.execute(() -> {
             if (client.currentScreen == null) {
-                client.setScreen(new AlbaSettingsScreen());
+                client.setScreen(new AlbaEditScreen());
             }
         });
         return 1;

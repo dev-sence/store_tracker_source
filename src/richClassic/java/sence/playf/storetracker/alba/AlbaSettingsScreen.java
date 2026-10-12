@@ -1,30 +1,23 @@
 package sence.playf.storetracker.alba;
 
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-
-import java.util.List;
 
 /** 1.21.4 전용 - playf의 FarmHudScreen과 같은 방식: 진짜 HUD 패널을 실제 화면 위치에 그대로
  * 그려서, 그 패널 자체를 드래그하면 바로 hudX/hudY가 바뀐다(설정창 안의 축소 미리보기가 아님).
- * 조작용 패널(표시 토글/크기조절/알바별 수정)은 화면 하단에 따로 둔다. "/알바설정" 또는
- * 키바인드로 연다. */
+ * 알바별 수정은 {@link AlbaEditScreen}에서 하고, 이 화면은 표시여부/크기/위치만 다룬다(2단계
+ * 구조) - "알바 수정" 화면의 "⚙ 설정" 버튼으로 들어온다. */
 public class AlbaSettingsScreen extends Screen {
-    private static final int PANEL_WIDTH = 360;
-    private static final int ROW_H = 24;
+    private static final int PANEL_WIDTH = 280;
     private static final int COLOR_BG = 0xF01B1B1B;
     private static final int COLOR_BORDER = 0x80FFFFFF;
     private static final int COLOR_TITLE = 0xFFECECEC;
     private static final int COLOR_MUTED = 0xFFA0A0A0;
     private static final int COLOR_ACCENT = 0xFF6FB0E8;
-    private static final int FACE_SIZE = 16;
-    private static final int ZONE_SWATCH_SIZE = 10;
     private static final int DIM_COLOR = 0x80000000;
+    private static final int PANEL_HEIGHT = 136;
 
     private ButtonWidget visibleToggleButton;
     private boolean draggingHud = false;
@@ -42,7 +35,7 @@ public class AlbaSettingsScreen extends Screen {
     }
 
     private int panelY() {
-        return height - panelHeight() - 20;
+        return height - PANEL_HEIGHT - 20;
     }
 
     @Override
@@ -63,28 +56,8 @@ public class AlbaSettingsScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> AlbaSettings.get().adjustScale(10))
                 .dimensions(px + PANEL_WIDTH - 102, py + 74, 24, 22).build());
 
-        int rowY = py + 108;
-        for (AlbaEntry entry : myHires()) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("수정"), b ->
-                            client.setScreen(new AlbaGuiScreen(entry.employer(), entry.employee())))
-                    .dimensions(px + PANEL_WIDTH - 60, rowY, 48, 20).build());
-            rowY += ROW_H;
-        }
-
         addDrawableChild(ButtonWidget.builder(Text.literal("닫기"), b -> close())
-                .dimensions(px + PANEL_WIDTH - 64, py + panelHeight() - 32, 52, 22).build());
-    }
-
-    private List<AlbaEntry> myHires() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        String me = client.player != null ? client.player.getName().getString() : "";
-        return AlbaTracker.getCachedHires().stream()
-                .filter(e -> e.employer().equalsIgnoreCase(me))
-                .toList();
-    }
-
-    private int panelHeight() {
-        return 108 + Math.max(1, myHires().size()) * ROW_H + 40;
+                .dimensions(px + PANEL_WIDTH - 64, py + PANEL_HEIGHT - 32, 52, 22).build());
     }
 
     /** 지금 실제 화면에 떠 있는 HUD 패널의 화면상 사각형(스케일 적용 후) - 드래그 판정과 강조
@@ -118,9 +91,8 @@ public class AlbaSettingsScreen extends Screen {
 
         int px = panelX();
         int py = panelY();
-        int ph = panelHeight();
-        context.fill(px, py, px + PANEL_WIDTH, py + ph, COLOR_BG);
-        drawBorder(context, px, py, PANEL_WIDTH, ph, COLOR_BORDER);
+        context.fill(px, py, px + PANEL_WIDTH, py + PANEL_HEIGHT, COLOR_BG);
+        drawBorder(context, px, py, PANEL_WIDTH, PANEL_HEIGHT, COLOR_BORDER);
 
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("알바 설정", true, COLOR_TITLE), px + 12, py + 12, COLOR_TITLE);
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("위 패널을 그대로 드래그해서 옮기세요", false, COLOR_ACCENT),
@@ -131,68 +103,7 @@ public class AlbaSettingsScreen extends Screen {
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("HUD 크기: " + settings.scalePercent + "%", false, COLOR_MUTED),
                 px + 12, py + 80, COLOR_MUTED);
 
-        List<AlbaEntry> mine = myHires();
-        int rowY = py + 108;
-        if (mine.isEmpty()) {
-            context.drawTextWithShadow(textRenderer, Text.literal("지금 고용 중인 알바가 없어요").formatted(Formatting.GRAY),
-                    px + 12, rowY + 4, COLOR_MUTED);
-        } else {
-            for (AlbaEntry entry : mine) {
-                Identifier face = PlayerFaceFetcher.getFaceTexture(entry.employee());
-                if (face != null) {
-                    AlbaPlatform.drawFace(context, face, px + 12, rowY + 2, FACE_SIZE);
-                } else {
-                    context.fill(px + 12, rowY + 2, px + 12 + FACE_SIZE, rowY + 2 + FACE_SIZE, 0xFF3C3C3C);
-                }
-
-                AlbaJob job = AlbaJob.fromName(entry.job());
-                String jobLabel = job != null ? job.label() : "미지정";
-                context.drawTextWithShadow(textRenderer,
-                        AlbaPlatform.styledText(entry.employee() + " · " + jobLabel + " · " + relativeTime(entry.hiredAtMillis()) + " 고용", false, COLOR_TITLE),
-                        px + 12 + FACE_SIZE + 6, rowY + 6, COLOR_TITLE);
-
-                AlbaZone zone = job == AlbaJob.PUMPKIN ? parseZone(entry.zone()) : null;
-                if (zone != null) {
-                    int swatchX = px + PANEL_WIDTH - 60 - ZONE_SWATCH_SIZE - 8;
-                    int swatchY = rowY + 7;
-                    context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
-                    drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
-                }
-                rowY += ROW_H;
-            }
-        }
-
         super.render(context, mouseX, mouseY, delta);
-    }
-
-    private static AlbaZone parseZone(String name) {
-        if (name == null) {
-            return null;
-        }
-        try {
-            return AlbaZone.valueOf(name);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    private static String relativeTime(long hiredAtMillis) {
-        if (hiredAtMillis <= 0L) {
-            return "방금";
-        }
-        long deltaSeconds = Math.max(0L, (System.currentTimeMillis() - hiredAtMillis) / 1000L);
-        if (deltaSeconds < 60L) {
-            return "방금";
-        }
-        long minutes = deltaSeconds / 60L;
-        if (minutes < 60L) {
-            return minutes + "분 전";
-        }
-        long hours = minutes / 60L;
-        if (hours < 24L) {
-            return hours + "시간 전";
-        }
-        return (hours / 24L) + "일 전";
     }
 
     private static void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {
