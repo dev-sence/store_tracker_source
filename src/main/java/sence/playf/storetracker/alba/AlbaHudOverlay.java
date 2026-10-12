@@ -67,7 +67,7 @@ public final class AlbaHudOverlay {
             String title = e.employer() + " → " + e.employee();
             String detail = detailText(e);
             int rowWidth = PADDING * 2 + textXOffset + Math.max(tr.getWidth(title), tr.getWidth(detail))
-                    + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 8;
+                    + JOB_ICON_SIZE + ZONE_SWATCH_SIZE + 18;
             width = Math.max(width, rowWidth);
         }
         return new int[]{width, height};
