@@ -211,7 +211,10 @@ const StoreTrackerRender = {
         <td class="text-secondary small">${this.formatTime(h.fired_at)}</td>
         <td><input type="number" class="form-control form-control-sm" min="0" step="1" data-field="box_count" placeholder="개수"></td>
         <td><input type="number" class="form-control form-control-sm" min="0" step="1" data-field="unit_price" value="${defaultPrice}"></td>
-        <td><button class="btn btn-sm btn-accent pending-record-save-btn" data-hire-id="${h.id}">저장</button></td>
+        <td class="d-flex gap-1">
+          <button class="btn btn-sm btn-accent pending-record-save-btn" data-hire-id="${h.id}">저장</button>
+          <button class="btn btn-sm btn-outline-light pending-record-delete-btn" data-hire-id="${h.id}" title="이 기록 삭제">×</button>
+        </td>
       </tr>`;
     }).join('');
   },
@@ -258,9 +261,12 @@ const StoreTrackerRender = {
         const pay = h.box_count !== null && h.box_count !== undefined
           ? `${h.box_count}상자${h.total_pay !== null ? ` (${h.total_pay.toLocaleString()}원)` : ''}`
           : '-';
-        return `<div class="d-flex justify-content-between small border-bottom py-1">
+        return `<div class="d-flex justify-content-between align-items-center small border-bottom py-1">
           <span>${escape(h.employer)} · ${escape(this.albaJobLabel(h.job))} · ${status}</span>
-          <span>${escape(pay)}</span>
+          <span class="d-flex align-items-center gap-2">
+            <span>${escape(pay)}</span>
+            <button class="btn btn-sm btn-outline-light hire-delete-btn" data-hire-id="${h.id}" style="padding:0 6px;" title="이 고용 기록 삭제">×</button>
+          </span>
         </div>`;
       }).join('')
       : '<div class="text-secondary small">기록 없음</div>';

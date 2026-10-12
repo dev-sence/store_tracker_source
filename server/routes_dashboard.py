@@ -600,6 +600,18 @@ def admin_update_alba_record(hire_id):
     return jsonify(hire.to_dict())
 
 
+@dashboard_bp.delete("/api/admin/alba/records/<int:hire_id>")
+@login_required
+def admin_delete_alba_record(hire_id):
+    """알바 고용 기록 자체를 통째로 지운다 - 잘못 찍힌 중복/테스트 기록을 치우는 용도."""
+    hire = AlbaHire.query.get(hire_id)
+    if hire is None:
+        return jsonify({"error": "not found"}), 404
+    db.session.delete(hire)
+    db.session.commit()
+    return "", 204
+
+
 @dashboard_bp.get("/api/admin/alba/people")
 @login_required
 def admin_alba_people():

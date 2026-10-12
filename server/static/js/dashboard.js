@@ -617,8 +617,33 @@
           }
         });
       });
+      body.querySelectorAll('.pending-record-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', () => handleDeleteAlbaRecord(btn.dataset.hireId, loadAlbaPendingRecords));
+      });
     } catch (err) {
       body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">불러오기 실패</td></tr>';
+    }
+  }
+
+  async function handleDeleteAlbaRecord(hireId, onDone) {
+    const result = await Swal.fire({
+      title: '이 알바 기록을 삭제할까요?',
+      text: '고용/해고/상자 기록이 통째로 지워지고 되돌릴 수 없습니다.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await StoreTrackerApi.deleteAlbaRecord(hireId);
+      StoreTrackerRender.toast('success', '삭제됐습니다');
+      loadAlbaPeople();
+      if (onDone) onDone();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '삭제 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
     }
   }
 
@@ -678,16 +703,37 @@
       const container = Swal.getHtmlContainer();
       if (container) {
         container.innerHTML = StoreTrackerRender.albaPersonDetailHtml(detail);
-        bindNoteDeleteButtons();
+        bindDetailButtons();
       }
     }
 
-    function bindNoteDeleteButtons() {
+    function bindDetailButtons() {
       document.querySelectorAll('.note-delete-btn').forEach((btn) => {
         btn.addEventListener('click', async () => {
           try {
             await StoreTrackerApi.deleteAlbaPersonNote(Number(btn.dataset.noteId));
             await refreshModal();
+          } catch (err) {
+            StoreTrackerRender.toast('error', '삭제 실패');
+          }
+        });
+      });
+      document.querySelectorAll('.hire-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const result = await Swal.fire({
+            title: '이 고용 기록을 삭제할까요?',
+            text: '고용/해고/상자 기록이 통째로 지워지고 되돌릴 수 없습니다.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: '삭제',
+            cancelButtonText: '취소',
+            ...StoreTrackerRender.swalTheme(),
+          });
+          if (!result.isConfirmed) return;
+          try {
+            await StoreTrackerApi.deleteAlbaRecord(Number(btn.dataset.hireId));
+            await refreshModal();
+            loadAlbaPeople();
           } catch (err) {
             StoreTrackerRender.toast('error', '삭제 실패');
           }
@@ -704,7 +750,7 @@
       cancelButtonText: '닫기',
       ...StoreTrackerRender.swalTheme(),
       didOpen: () => {
-        bindNoteDeleteButtons();
+        bindDetailButtons();
       },
       preConfirm: async () => {
         const input = document.getElementById('personNoteInput');

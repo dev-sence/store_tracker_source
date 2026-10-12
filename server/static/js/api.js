@@ -267,6 +267,14 @@ const StoreTrackerApi = {
     return data;
   },
 
+  async deleteAlbaRecord(hireId) {
+    const res = await fetch(`/api/admin/alba/records/${hireId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `request failed: ${res.status}`);
+    }
+  },
+
   async updateAlbaRecord(hireId, fields) {
     const res = await fetch(`/api/admin/alba/records/${hireId}`, {
       method: 'POST',
