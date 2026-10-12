@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,7 @@ public class AlbaGuiScreen extends Screen {
     private static final int COLOR_BORDER = 0x66FFFFFF;
     private static final int COLOR_TITLE = 0xFFECECEC;
     private static final int ZONE_SWATCH_SIZE = 10;
+    private static final int FACE_SIZE = 16;
 
     private final String employer;
     private final String employee;
@@ -169,7 +171,18 @@ public class AlbaGuiScreen extends Screen {
 
         String title = stage == Stage.TOP ? employee + " 작업 선택"
                 : stage == Stage.OTHER_CROP ? "기타작물 선택" : "작업 구역 선택";
-        context.drawTextWithShadow(textRenderer, Text.literal(title), px + PANEL_PADDING, py + PANEL_PADDING, COLOR_TITLE);
+        int titleX = px + PANEL_PADDING;
+        if (AlbaPlatform.richFeaturesAvailable()) {
+            Identifier face = PlayerFaceFetcher.getFaceTexture(employee);
+            int faceY = py + PANEL_PADDING - 2;
+            if (face != null) {
+                AlbaPlatform.drawFace(context, face, titleX, faceY, FACE_SIZE);
+            } else {
+                context.fill(titleX, faceY, titleX + FACE_SIZE, faceY + FACE_SIZE, 0xFF3C3C3C);
+            }
+            titleX += FACE_SIZE + 6;
+        }
+        context.drawTextWithShadow(textRenderer, Text.literal(title), titleX, py + PANEL_PADDING, COLOR_TITLE);
 
         super.render(context, mouseX, mouseY, delta);
 
@@ -192,10 +205,5 @@ public class AlbaGuiScreen extends Screen {
     @Override
     public boolean shouldPause() {
         return false;
-    }
-
-    @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-        // 뒤쪽 게임 화면이 그대로 보이게 둔다 (화면을 어둡게 덮지 않음).
     }
 }

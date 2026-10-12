@@ -20,6 +20,26 @@ def gameVersion = project.findProperty('gameVersion') ?: project.minecraft_versi
 def yarnMappings = project.findProperty('yarnMappings') ?: project.yarn_mappings
 def fabricApiVersion = project.findProperty('fabricApiVersion') ?: project.fabric_version
 
+// 알바 HUD의 얼굴 아이콘/크기조절/진짜 키바인드/설정화면 드래그 이동은 마인크래프트 자체 렌더링 API가
+// 1.21.6, 1.21.9에서 타입이 바뀌어서(MatrixStack->Matrix3x2fStack, RenderLayer->RenderPipeline,
+// 마우스 클릭 (double,double,int)->Click, KeyBinding.Category 문자열->전용 타입) 12개 버전 전부를
+// 하나의 코드로 지원할 수 없다. 실제로 쓰는 버전 두 개(1.21.4 메인, 1.21.11 보조)만 각 버전 API에
+// 맞는 구현을 끼워 넣고, 나머지 10개 버전은 지금의 안전한(버튼 기반, 얼굴 아이콘 없음) 버전을 쓴다.
+def richClassicVersions = ['1.21.4']
+def richModernVersions = ['1.21.11']
+def isRichClassic = richClassicVersions.contains(gameVersion.toString())
+def isRichModern = richModernVersions.contains(gameVersion.toString())
+// 어느 쪽으로 쓸지 고르는 3개 구현(AlbaPlatform/AlbaSettingsScreen/AlbaKeybinds)은 src/main/java가
+// 아니라 각자 자기 디렉터리(richDefault/richClassic/richModern)에 둔다 - 셋 다 같은 파일 이름을
+// 쓰는데, Gradle의 SourceDirectorySet.exclude는 "이 상대경로 전부"를 모든 srcDir에 동시 적용해서,
+// main에 뒀다가 exclude하면 나중에 추가한 richClassic/richModern 쪽의 같은 이름 파일까지 같이
+// 빠져버리는 문제가 있었다. 그래서 세 variant를 전부 main 밖에 두고, 매번 정확히 하나만 추가한다.
+def albaVariantDir = isRichModern ? 'richModern' : (isRichClassic ? 'richClassic' : 'richDefault')
+project.afterEvaluate {
+    // afterEvaluate로 걸어서 Loom이 자기 소스셋 설정을 전부 끝낸 다음 마지막에 적용되게 한다.
+    sourceSets.main.java.srcDir("src/${albaVariantDir}/java")
+}
+
 repositories {
     // Add repositories to retrieve artifacts from in here.
     // You should only use this when depending on other mods because

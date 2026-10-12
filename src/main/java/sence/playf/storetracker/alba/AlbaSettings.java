@@ -23,6 +23,8 @@ public class AlbaSettings {
     public int hudX = 8;
     public int hudY = 8;
     public boolean hudVisible = true;
+    /** 1.21.4/1.21.11 전용 - 다른 버전은 행렬 크기조절 API가 없어서 무시된다. */
+    public int scalePercent = 100;
     public String[] zoneLabels = {
             AlbaZone.defaultLabel(AlbaZone.PINK), AlbaZone.defaultLabel(AlbaZone.YELLOW),
             AlbaZone.defaultLabel(AlbaZone.PURPLE), AlbaZone.defaultLabel(AlbaZone.BLUE),
@@ -46,6 +48,11 @@ public class AlbaSettings {
     public void nudgePosition(int dx, int dy) {
         hudX = Math.max(0, hudX + dx);
         hudY = Math.max(0, hudY + dy);
+        save();
+    }
+
+    public void adjustScale(int delta) {
+        scalePercent = Math.max(50, Math.min(200, scalePercent + delta));
         save();
     }
 

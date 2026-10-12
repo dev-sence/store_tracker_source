@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sence.playf.storetracker.alba.AlbaHireDetector;
 import sence.playf.storetracker.alba.AlbaHudOverlay;
+import sence.playf.storetracker.alba.AlbaKeybinds;
 import sence.playf.storetracker.alba.AlbaSettingsCommand;
 import sence.playf.storetracker.alba.AlbaTracker;
 import sence.playf.storetracker.auth.MemberGate;
@@ -41,6 +42,7 @@ public class StoreTrackerClient implements ClientModInitializer {
         AlbaHireDetector.register();
         AlbaHudOverlay.register();
         AlbaSettingsCommand.register();
+        AlbaKeybinds.register();
 
         if (BuildInfo.isDevBuild()) {
             ChestAddCommand.register();
@@ -72,6 +74,7 @@ public class StoreTrackerClient implements ClientModInitializer {
         int[] tickCounter = {0};
         int[] albaTickCounter = {0};
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            AlbaKeybinds.tick(client);
             if (client.player == null) {
                 return;
             }
