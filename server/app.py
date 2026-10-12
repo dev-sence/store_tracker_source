@@ -7,6 +7,7 @@ from config import Config
 from crypto import SecureChannel
 from models import db
 from routes_admin import admin_bp
+from routes_alba import alba_bp
 from routes_dashboard import dashboard_bp
 from routes_public import public_bp
 
@@ -62,6 +63,7 @@ def create_app():
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(alba_bp)
 
     @app.get("/healthz")
     def healthz():

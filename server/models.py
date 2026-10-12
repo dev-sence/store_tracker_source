@@ -275,3 +275,29 @@ class UnassignedReturn(db.Model):
             "depositor": self.depositor,
             "created_at": self.created_at.isoformat(),
         }
+
+
+class AlbaHire(db.Model):
+    """"알바"(섬 서버의 기존 고용 플러그인) 고용 1건. fired_at이 NULL이면 지금 일하는 중이라는 뜻.
+    job/zone은 고용 직후 모드 GUI에서 고르므로 처음엔 비어 있을 수 있다."""
+    __tablename__ = "alba_hires"
+
+    id = db.Column(db.Integer, primary_key=True)
+    map_key = db.Column(db.String(128), nullable=False, index=True)
+    employer = db.Column(db.String(32), nullable=False, index=True)
+    employee = db.Column(db.String(32), nullable=False)
+    job = db.Column(db.String(32), nullable=True)
+    zone = db.Column(db.String(32), nullable=True)
+    hired_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fired_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "employer": self.employer,
+            "employee": self.employee,
+            "job": self.job,
+            "zone": self.zone,
+            "hired_at": self.hired_at.isoformat(),
+            "fired_at": self.fired_at.isoformat() if self.fired_at else None,
+        }
