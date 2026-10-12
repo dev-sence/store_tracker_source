@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
@@ -513,11 +513,27 @@ def admin_alba_history():
 @dashboard_bp.get("/api/admin/events/export")
 @developer_required
 def admin_export_events():
-    """입출고 로그 전체를 처음부터 끝까지 CSV로 내려받는다 (화면의 최근 200건 제한과 무관)."""
+    """입출고 로그를 CSV로 내려받는다 (화면의 최근 200건 제한과 무관). start/end(YYYY-MM-DD)를
+    안 주면 전체 기간."""
     map_key = _normalize_map_key(request.args.get("map", ""))
     query = Event.query.order_by(Event.id.asc())
     if map_key:
         query = query.filter_by(map_key=map_key)
+
+    start_str = (request.args.get("start") or "").strip()
+    end_str = (request.args.get("end") or "").strip()
+    if start_str:
+        try:
+            start_dt = datetime.strptime(start_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            query = query.filter(Event.occurred_at >= start_dt)
+        except ValueError:
+            return jsonify({"error": "start 형식은 YYYY-MM-DD 입니다"}), 400
+    if end_str:
+        try:
+            end_dt = datetime.strptime(end_str, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            query = query.filter(Event.occurred_at < end_dt)
+        except ValueError:
+            return jsonify({"error": "end 형식은 YYYY-MM-DD 입니다"}), 400
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -532,7 +548,8 @@ def admin_export_events():
             e.pos_x, e.pos_y, e.pos_z,
         ])
 
-    filename = f"events_{map_key or 'all'}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    range_part = f"{start_str or 'start'}_{end_str or 'end'}" if (start_str or end_str) else "all"
+    filename = f"events_{map_key or 'all'}_{range_part}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(
         buffer.getvalue(),
         mimetype="text/csv",
@@ -648,6 +665,24 @@ def assign_unassigned_return(return_id):
     ret.assigned_at = datetime.now(timezone.utc)
     db.session.commit()
     return jsonify({"status": "ok", "assigned_to": ret.assigned_to})
+
+
+@dashboard_bp.post("/api/admin/unassigned-returns/clear")
+@developer_required
+def clear_unassigned_returns():
+    """지금 쌓인 미귀속 반납을 전부 목록에서 치운다 - 누구 몫인지는 더 이상 찾지 않겠다는 뜻이라
+    보유 장부/재고는 건드리지 않는다(이미 상자 안에 물건은 들어있으니 그냥 더 이상 묻지 않는
+    처리). 실제로 보유자를 찾아 재고에 정확히 반영하려면 하나씩 "지정"을 써야 한다."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    admin_member = _current_member()
+    rows = UnassignedReturn.query.filter_by(map_key=map_key, assigned_to=None).all()
+    count = len(rows)
+    now = datetime.now(timezone.utc)
+    for ret in rows:
+        ret.assigned_to = f"(정리됨: {admin_member.minecraft_username})"
+        ret.assigned_at = now
+    db.session.commit()
+    return jsonify({"status": "ok", "cleared": count})
 
 
 @dashboard_bp.post("/api/admin/members")

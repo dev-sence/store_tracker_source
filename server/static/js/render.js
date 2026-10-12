@@ -157,15 +157,28 @@ const StoreTrackerRender = {
       container.innerHTML = '<div class="text-secondary small">아직 기록이 없습니다.</div>';
       return;
     }
-    container.innerHTML = list.map((h) => {
-      const fired = !!h.fired_at;
+    // AlbaHire 한 행에 고용/해고 시각이 같이 들어있어서, 고용 당시 로그가 그냥 사라져 보이는
+    // 문제가 있었다 - 행마다 "고용" 이벤트 하나(+해고됐으면 "해고" 이벤트 하나)를 따로 만들어서
+    // 시간순으로 합쳐 보여준다.
+    const events = [];
+    for (const h of list) {
+      const jobLabel = h.job ? ' · ' + this.albaJobLabel(h.job) : '';
+      events.push({ type: 'hire', time: h.hired_at, employer: h.employer, employee: h.employee, jobLabel });
+      if (h.fired_at) {
+        events.push({ type: 'fire', time: h.fired_at, employer: h.employer, employee: h.employee, jobLabel });
+      }
+    }
+    events.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    container.innerHTML = events.map((e) => {
+      const fired = e.type === 'fire';
       return `
       <div class="panel p-2 px-3 d-flex justify-content-between align-items-center">
         <div>
           <span class="badge ${fired ? 'badge-take' : 'badge-deposit'} me-2">${fired ? '해고' : '고용'}</span>
-          <span class="small">${escape(h.employer)} → ${escape(h.employee)}${h.job ? ' · ' + escape(this.albaJobLabel(h.job)) : ''}</span>
+          <span class="small">${escape(e.employer)} → ${escape(e.employee)}${escape(e.jobLabel)}</span>
         </div>
-        <span class="text-secondary small">${this.formatTime(fired ? h.fired_at : h.hired_at)}</span>
+        <span class="text-secondary small">${this.formatTime(e.time)}</span>
       </div>`;
     }).join('');
   },

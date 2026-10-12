@@ -3,12 +3,94 @@
   const currentMap = document.body.dataset.map || '';
   const isDeveloper = document.body.dataset.isDeveloper === 'true';
   const isSuperAdmin = document.body.dataset.isSuperAdmin === 'true';
+  let lastEvents = [];
+
+  function applyEventFilter() {
+    const textInput = document.getElementById('logFilterText');
+    const actionSelect = document.getElementById('logFilterAction');
+    const countEl = document.getElementById('logFilterCount');
+    const text = (textInput ? textInput.value : '').trim().toLowerCase();
+    const action = actionSelect ? actionSelect.value : '';
+
+    const filtered = lastEvents.filter((e) => {
+      if (action && e.action !== action) return false;
+      if (text) {
+        const haystack = `${e.minecraft_username} ${e.item_name}`.toLowerCase();
+        if (!haystack.includes(text)) return false;
+      }
+      return true;
+    });
+
+    StoreTrackerRender.events(filtered, isDeveloper);
+    if (countEl) {
+      countEl.textContent = (text || action) ? `${filtered.length} / ${lastEvents.length}건` : '';
+    }
+  }
+
+  function bindLogFilter() {
+    const textInput = document.getElementById('logFilterText');
+    const actionSelect = document.getElementById('logFilterAction');
+    const clearBtn = document.getElementById('logFilterClearBtn');
+    if (!textInput || !actionSelect) return;
+    textInput.addEventListener('input', applyEventFilter);
+    actionSelect.addEventListener('change', applyEventFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        textInput.value = '';
+        actionSelect.value = '';
+        applyEventFilter();
+      });
+    }
+  }
+
+  function bindExportRangeButton() {
+    const btn = document.getElementById('exportRangeBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const start = document.getElementById('exportStartDate').value;
+      const end = document.getElementById('exportEndDate').value;
+      const params = new URLSearchParams({ map: currentMap });
+      if (start) params.set('start', start);
+      if (end) params.set('end', end);
+      window.location.href = `/api/admin/events/export?${params.toString()}`;
+    });
+  }
+
+  async function handleClearUnassignedReturns() {
+    const result = await Swal.fire({
+      title: '미귀속 반납을 전부 정리할까요?',
+      text: '목록에서만 치워지고, 보유 장부나 재고는 바뀌지 않습니다. 몫 주인을 나중에 찾을 수 없게 됩니다.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '정리',
+      cancelButtonText: '취소',
+      ...StoreTrackerRender.swalTheme(),
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/admin/unassigned-returns/clear?map=${encodeURIComponent(currentMap)}`, { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || '정리 실패');
+      StoreTrackerRender.toast('success', `${body.cleared}건 정리됐습니다`);
+      loadUnassignedReturns();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: '정리 실패', text: err.message, ...StoreTrackerRender.swalTheme() });
+    }
+  }
+
+  function bindClearUnassignedReturnsButton() {
+    const btn = document.getElementById('clearUnassignedReturnsBtn');
+    if (!btn) return;
+    btn.addEventListener('click', handleClearUnassignedReturns);
+  }
 
   async function refresh(manual) {
     try {
       const data = await StoreTrackerApi.fetchDashboardData(currentMap);
       StoreTrackerRender.stats(data);
-      StoreTrackerRender.events(data.events, isDeveloper);
+      lastEvents = data.events;
+      applyEventFilter();
       StoreTrackerRender.inventory(data.inventory, isDeveloper, handleInventoryEdit);
       StoreTrackerRender.manualTransferItemOptions(data.inventory);
       StoreTrackerRender.manualTransferLog(data.events.filter((e) => e.action === 'HOLD' || e.action === 'RELEASE'));
@@ -537,6 +619,9 @@
 
   bindAddPublicItemButton();
   bindManualTransferButtons();
+  bindLogFilter();
+  bindExportRangeButton();
+  bindClearUnassignedReturnsButton();
   bindLogout();
   refresh(false);
   loadFeatureToggles();
