@@ -58,16 +58,83 @@ public final class AlbaBridge {
             JsonObject root = result.bodyAsJson().getAsJsonObject();
             JsonArray hires = root.has("hires") ? root.getAsJsonArray("hires") : new JsonArray();
             for (var el : hires) {
-                JsonObject h = el.getAsJsonObject();
-                String employer = h.get("employer").getAsString();
-                String employee = h.get("employee").getAsString();
-                String job = h.has("job") && !h.get("job").isJsonNull() ? h.get("job").getAsString() : null;
-                String zone = h.has("zone") && !h.get("zone").isJsonNull() ? h.get("zone").getAsString() : null;
-                long hiredAtMillis = parseMillis(h.get("hired_at").getAsString());
-                entries.add(new AlbaEntry(employer, employee, job, zone, hiredAtMillis));
+                entries.add(parseEntry(el.getAsJsonObject()));
             }
             onResult.accept(entries);
         });
+    }
+
+    /** 해고는 됐는데 아직 "몇 상자 채웠는지"를 안 적은 내 알바 기록 - 알바 수정 화면의 "기록 대기
+     * 중" 목록에 쓴다. */
+    public void fetchPendingRecords(String employer, java.util.function.Consumer<List<AlbaEntry>> onResult) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        String mapKey = MapKey.current(client);
+        Async.run(() -> {
+            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL,
+                    "/api/alba/pending-records?map=" + encode(mapKey) + "&employer=" + encode(employer));
+            if (!result.isSuccess() || result.body() == null) {
+                onResult.accept(List.of());
+                return;
+            }
+            List<AlbaEntry> entries = new ArrayList<>();
+            JsonObject root = result.bodyAsJson().getAsJsonObject();
+            JsonArray hires = root.has("hires") ? root.getAsJsonArray("hires") : new JsonArray();
+            for (var el : hires) {
+                entries.add(parseEntry(el.getAsJsonObject()));
+            }
+            onResult.accept(entries);
+        });
+    }
+
+    /** 작업별 상자당 기본 단가 - "몇 상자?" 입력창을 열 때 기본값으로 미리 채운다. */
+    public void fetchWageRates(java.util.function.Consumer<java.util.Map<String, Integer>> onResult) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        String mapKey = MapKey.current(client);
+        Async.run(() -> {
+            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL, "/api/alba/wage-rates?map=" + encode(mapKey));
+            java.util.Map<String, Integer> rates = new java.util.HashMap<>();
+            if (result.isSuccess() && result.body() != null) {
+                JsonObject root = result.bodyAsJson().getAsJsonObject();
+                for (var e : root.entrySet()) {
+                    if (!e.getValue().isJsonNull()) {
+                        rates.put(e.getKey(), e.getValue().getAsInt());
+                    }
+                }
+            }
+            onResult.accept(rates);
+        });
+    }
+
+    /** 몇 상자 채웠는지(+ 선택적으로 단가 덮어쓰기)를 서버에 기록한다. */
+    public void record(long hireId, int boxCount, Integer unitPriceOverride, Runnable onDone) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        JsonObject body = new JsonObject();
+        body.addProperty("username", client.getSession().getUsername());
+        body.addProperty("map_key", MapKey.current(client));
+        body.addProperty("hire_id", hireId);
+        body.addProperty("box_count", boxCount);
+        if (unitPriceOverride != null) {
+            body.addProperty("unit_price", unitPriceOverride);
+        }
+        Async.run(() -> {
+            ApiClient.Result result = ApiClient.postEncrypted(BuildInfo.API_BASE_URL, "/api/alba/record", channel(), body);
+            if (!result.isSuccess()) {
+                LOGGER.warn("알바 기록 전송 실패 (status={})", result.statusCode());
+            }
+            if (onDone != null) {
+                client.execute(onDone);
+            }
+        });
+    }
+
+    private static AlbaEntry parseEntry(JsonObject h) {
+        long id = h.has("id") && !h.get("id").isJsonNull() ? h.get("id").getAsLong() : 0L;
+        String employer = h.get("employer").getAsString();
+        String employee = h.get("employee").getAsString();
+        String job = h.has("job") && !h.get("job").isJsonNull() ? h.get("job").getAsString() : null;
+        String zone = h.has("zone") && !h.get("zone").isJsonNull() ? h.get("zone").getAsString() : null;
+        long hiredAtMillis = parseMillis(h.get("hired_at").getAsString());
+        return new AlbaEntry(id, employer, employee, job, zone, hiredAtMillis);
     }
 
     private static long parseMillis(String iso) {
