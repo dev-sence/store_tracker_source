@@ -220,6 +220,21 @@ const StoreTrackerRender = {
     }).join('');
   },
 
+  /** 370000 -> "37만원", 5000000 -> "500만원", 12345 -> "1만 2345원" 식으로 한글 단위로 보여준다 -
+   * 단가 입력칸 옆에 괄호로 같이 보여줘서 숫자가 커져도 한눈에 얼마인지 알 수 있게. */
+  formatKoreanWon(value) {
+    const n = Math.round(Number(value) || 0);
+    if (n === 0) return '0원';
+    const eok = Math.floor(n / 100000000);
+    const man = Math.floor((n % 100000000) / 10000);
+    const rest = n % 10000;
+    const parts = [];
+    if (eok > 0) parts.push(`${eok}억`);
+    if (man > 0) parts.push(`${man}만`);
+    if (rest > 0 || parts.length === 0) parts.push(`${rest}`);
+    return parts.join(' ') + '원';
+  },
+
   albaWageRates(rates) {
     const container = document.getElementById('albaWageRateList');
     if (!container) return;
@@ -227,9 +242,10 @@ const StoreTrackerRender = {
     container.innerHTML = rates.map((r) => `
       <div class="d-flex align-items-center gap-2">
         <span class="small" style="width:90px;">${escape(this.albaJobLabel(r.job))}</span>
-        <input type="number" class="form-control form-control-sm" style="width:90px;" min="0" step="1"
+        <input type="number" class="form-control form-control-sm" style="width:110px;" min="0" step="1"
                value="${r.unit_price}" data-wage-job="${escape(r.job)}">
-        <span class="text-secondary small">원/상자</span>
+        <span class="text-secondary small wage-hint" data-wage-hint="${escape(r.job)}" style="min-width:90px;">(${this.formatKoreanWon(r.unit_price)})</span>
+        <span class="text-secondary small">/상자</span>
         <button class="btn btn-sm btn-outline-light wage-save-btn" data-wage-job="${escape(r.job)}">저장</button>
       </div>
     `).join('');

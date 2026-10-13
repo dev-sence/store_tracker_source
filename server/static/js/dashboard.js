@@ -702,6 +702,13 @@
     try {
       const rates = await StoreTrackerApi.fetchAlbaWageRates(currentMap);
       StoreTrackerRender.albaWageRates(rates);
+      container.querySelectorAll('input[data-wage-job]').forEach((input) => {
+        const hint = container.querySelector(`.wage-hint[data-wage-hint="${input.dataset.wageJob}"]`);
+        if (!hint) return;
+        input.addEventListener('input', () => {
+          hint.textContent = `(${StoreTrackerRender.formatKoreanWon(input.value)})`;
+        });
+      });
       container.querySelectorAll('.wage-save-btn').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const job = btn.dataset.wageJob;
