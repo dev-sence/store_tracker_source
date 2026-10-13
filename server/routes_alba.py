@@ -115,18 +115,16 @@ def set_job():
         return jsonify({"error": "missing fields"}), 400
 
     username = data["username"]
-    employer = data["employer"]
     employee = data["employee"]
-    if username.lower() != employer.lower():
-        _dev_log("alba-job", username, "거부: 본인이 고용주가 아닌 작업 설정", data)
-        return jsonify({"error": "employer mismatch"}), 403
-
+    # 예전엔 고용주 본인만 작업을 고를 수 있었는데, "다른 사람이 고용한 알바는 수정이 안 뜬다"는
+    # 요청에 맞춰 해고처럼 등록 멤버라면 누구든 고칠 수 있게 풀었다 - employer는 더 이상 본인 확인에
+    # 안 쓰고, 활성 고용도 employee 기준으로만 찾는다(해고와 동일한 이유).
     member = Member.query.filter_by(minecraft_username=username).first()
     if member is None:
         return jsonify({"status": "not_found"}), 404
 
     map_key = _normalize_map_key(data["map_key"])
-    existing = _active_hire(map_key, employer, employee)
+    existing = _active_hire_by_employee(map_key, employee)
     if existing is None:
         return jsonify({"error": "no active hire for this pair"}), 404
 
@@ -134,7 +132,7 @@ def set_job():
     existing.zone = data.get("zone")
     db.session.commit()
     _dev_log("alba-job", username,
-             f"작업 설정: {employer} -> {employee} = {existing.job}" + (f" ({existing.zone})" if existing.zone else ""),
+             f"작업 설정: {existing.employer} -> {employee} = {existing.job}" + (f" ({existing.zone})" if existing.zone else ""),
              data)
     return jsonify({"status": "ok", "hire": existing.to_dict()}), 202
 

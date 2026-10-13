@@ -82,6 +82,25 @@ def list_events():
     return jsonify([e.to_dict() for e in events])
 
 
+@admin_bp.post("/alba/fix-wage-units")
+@require_admin
+def fix_alba_wage_units():
+    """단가를 "만원" 단위 숫자(37, 38처럼)로 잘못 저장해뒀던 걸 실제 원 단위로 올린다(×10000).
+    이 맵 알바 단가는 실제로 수십만 원대라서, 1000 미만으로 저장된 값은 전부 "만원" 단위로
+    잘못 적힌 것으로 보고 일괄 교정한다 - 기본값(DEFAULT_WAGE_RATES)을 바꾼 뒤에도 이미 저장된
+    AlbaWageRate 행이나 이미 기록된 AlbaHire.unit_price는 그대로 작은 값으로 남아있었다."""
+    threshold = 1000
+    moved = {"alba_hires": 0, "alba_wage_rates": 0}
+    for row in AlbaHire.query.filter(AlbaHire.unit_price.isnot(None), AlbaHire.unit_price < threshold).all():
+        row.unit_price = row.unit_price * 10000
+        moved["alba_hires"] += 1
+    for row in AlbaWageRate.query.filter(AlbaWageRate.unit_price < threshold).all():
+        row.unit_price = row.unit_price * 10000
+        moved["alba_wage_rates"] += 1
+    db.session.commit()
+    return jsonify({"status": "ok", "moved": moved})
+
+
 @admin_bp.get("/map-keys")
 @require_admin
 def list_map_keys():
