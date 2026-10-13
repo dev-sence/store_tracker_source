@@ -7,10 +7,11 @@ from routes_public import _dev_log, _normalize_map_key, _parse_encrypted_body
 
 alba_bp = Blueprint("alba", __name__, url_prefix="/api/alba")
 
-# 아직 맵에 단가를 설정한 적 없는 작업에 쓰는 기본값 - 사용자가 처음 요청한 기준가. 대시보드에서
-# 언제든 덮어쓸 수 있고(AlbaWageRate 행이 생기면 이 기본값 대신 그걸 씀), 기록 시점에 건별로도
-# 덮어쓸 수 있다.
-DEFAULT_WAGE_RATES = {"WATERMELON": 38, "PUMPKIN": 37}
+# 아직 맵에 단가를 설정한 적 없는 작업에 쓰는 기본값 - 사용자가 처음 요청한 기준가(수박 38만원,
+# 호박 37만원)를 실제 원 단위 숫자로 저장한다("만원" 단위 축약 표기 없이 숫자 그대로 보여달라는
+# 요청에 맞춰, 계산/표시 전부 원 단위로 통일). 대시보드에서 언제든 덮어쓸 수 있고(AlbaWageRate
+# 행이 생기면 이 기본값 대신 그걸 씀), 기록 시점에 건별로도 덮어쓸 수 있다.
+DEFAULT_WAGE_RATES = {"WATERMELON": 380000, "PUMPKIN": 370000}
 
 
 def _active_hire(map_key, employer, employee):
