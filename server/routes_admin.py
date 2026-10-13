@@ -91,17 +91,13 @@ def fix_alba_wage_units():
     AlbaWageRate 행이나 이미 기록된 AlbaHire.unit_price는 그대로 작은 값으로 남아있었다."""
     threshold = 1000
     moved = {"alba_hires": 0, "alba_wage_rates": 0}
-    try:
-        for row in AlbaHire.query.filter(AlbaHire.unit_price.isnot(None), AlbaHire.unit_price < threshold).all():
-            row.unit_price = row.unit_price * 10000
-            moved["alba_hires"] += 1
-        for row in AlbaWageRate.query.filter(AlbaWageRate.unit_price < threshold).all():
-            row.unit_price = row.unit_price * 10000
-            moved["alba_wage_rates"] += 1
-        db.session.commit()
-    except Exception as e:  # 일시적으로 자세한 에러를 그대로 보여준다(admin 토큰 보호라 안전) - 운영 DB에서만 500이 나서 원인 파악용.
-        db.session.rollback()
-        return jsonify({"error": "internal", "detail": repr(e)}), 500
+    for row in AlbaHire.query.filter(AlbaHire.unit_price.isnot(None), AlbaHire.unit_price < threshold).all():
+        row.unit_price = row.unit_price * 10000
+        moved["alba_hires"] += 1
+    for row in AlbaWageRate.query.filter(AlbaWageRate.unit_price < threshold).all():
+        row.unit_price = row.unit_price * 10000
+        moved["alba_wage_rates"] += 1
+    db.session.commit()
     return jsonify({"status": "ok", "moved": moved})
 
 
