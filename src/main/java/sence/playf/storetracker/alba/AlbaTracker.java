@@ -22,10 +22,18 @@ public final class AlbaTracker {
         if (!polling.compareAndSet(false, true)) {
             return;
         }
-        BRIDGE.fetchStatus(entries -> {
-            cached = entries;
+        try {
+            BRIDGE.fetchStatus(entries -> {
+                cached = entries;
+                polling.set(false);
+            });
+        } catch (Exception e) {
+            // fetchStatus 자체가 콜백을 부르기도 전에 던지면 polling이 true로 영영 멈춰서 이후의
+            // 모든 폴링이 조용히 무시된다(HUD가 그 순간에 박제됨) - 그런 일이 없게 AlbaBridge
+            // 쪽에서 이미 내부적으로 다 잡지만(try-catch), 혹시 몰라 여기도 한 번 더 막아둔다.
             polling.set(false);
-        });
+            throw e;
+        }
     }
 
     /** 고용/해고/작업 변경 직후 호출 - 다음 주기 폴링을 기다리지 않고 바로 최신화한다. */

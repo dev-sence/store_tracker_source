@@ -43,25 +43,16 @@ public final class AlbaBridge {
         postAsync("/api/alba/job", body, "알바 작업 설정(" + employer + " -> " + employee + " = " + job + ")");
     }
 
-    /** 렌더 스레드를 막지 않는다 - 결과는 콜백으로 돌아온다. 실패하면 빈 목록을 돌려준다. */
+    /** 렌더 스레드를 막지 않는다 - 결과는 콜백으로 돌아온다. 실패하면 빈 목록을 돌려준다.
+     * AlbaTracker.pollNow()의 "polling" 플래그는 이 콜백이 호출돼야 풀리는데, 여기서 예외가 밖으로
+     * 새 나가면(Async.run이 잡아서 로그는 남기지만) 콜백이 영영 안 불려서 그 플래그가 true로
+     * 멈춘 채 다시는 안 풀린다 - 그러면 HUD/알바 수정 화면이 그 시점 내용으로 영구히 멈춰버리고
+     * 재접속 전까진 절대 안 풀린다("동기화가 이상하다"는 신고의 유력한 원인). 그래서 파싱 도중
+     * 뭐가 터지든 반드시 onResult가 불리게 try-catch로 감싼다. */
     public void fetchStatus(java.util.function.Consumer<List<AlbaEntry>> onResult) {
         MinecraftClient client = MinecraftClient.getInstance();
         String mapKey = MapKey.current(client);
-        Async.run(() -> {
-            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL,
-                    "/api/alba/status?map=" + encode(mapKey));
-            if (!result.isSuccess() || result.body() == null) {
-                onResult.accept(List.of());
-                return;
-            }
-            List<AlbaEntry> entries = new ArrayList<>();
-            JsonObject root = result.bodyAsJson().getAsJsonObject();
-            JsonArray hires = root.has("hires") ? root.getAsJsonArray("hires") : new JsonArray();
-            for (var el : hires) {
-                entries.add(parseEntry(el.getAsJsonObject()));
-            }
-            onResult.accept(entries);
-        });
+        Async.run(() -> onResult.accept(fetchEntries("/api/alba/status?map=" + encode(mapKey))));
     }
 
     /** 해고는 됐는데 아직 "몇 상자 채웠는지"를 안 적은 내 알바 기록 - 알바 수정 화면의 "기록 대기
@@ -69,12 +60,15 @@ public final class AlbaBridge {
     public void fetchPendingRecords(String employer, java.util.function.Consumer<List<AlbaEntry>> onResult) {
         MinecraftClient client = MinecraftClient.getInstance();
         String mapKey = MapKey.current(client);
-        Async.run(() -> {
-            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL,
-                    "/api/alba/pending-records?map=" + encode(mapKey) + "&employer=" + encode(employer));
+        Async.run(() -> onResult.accept(
+                fetchEntries("/api/alba/pending-records?map=" + encode(mapKey) + "&employer=" + encode(employer))));
+    }
+
+    private List<AlbaEntry> fetchEntries(String path) {
+        try {
+            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL, path);
             if (!result.isSuccess() || result.body() == null) {
-                onResult.accept(List.of());
-                return;
+                return List.of();
             }
             List<AlbaEntry> entries = new ArrayList<>();
             JsonObject root = result.bodyAsJson().getAsJsonObject();
@@ -82,8 +76,11 @@ public final class AlbaBridge {
             for (var el : hires) {
                 entries.add(parseEntry(el.getAsJsonObject()));
             }
-            onResult.accept(entries);
-        });
+            return entries;
+        } catch (Exception e) {
+            LOGGER.warn("[알바] 목록 응답 파싱 실패 ({}): {}", path, e.toString());
+            return List.of();
+        }
     }
 
     /** 작업별 상자당 기본 단가 - "몇 상자?" 입력창을 열 때 기본값으로 미리 채운다. */
@@ -91,15 +88,19 @@ public final class AlbaBridge {
         MinecraftClient client = MinecraftClient.getInstance();
         String mapKey = MapKey.current(client);
         Async.run(() -> {
-            ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL, "/api/alba/wage-rates?map=" + encode(mapKey));
             java.util.Map<String, Integer> rates = new java.util.HashMap<>();
-            if (result.isSuccess() && result.body() != null) {
-                JsonObject root = result.bodyAsJson().getAsJsonObject();
-                for (var e : root.entrySet()) {
-                    if (!e.getValue().isJsonNull()) {
-                        rates.put(e.getKey(), e.getValue().getAsInt());
+            try {
+                ApiClient.Result result = ApiClient.get(BuildInfo.API_BASE_URL, "/api/alba/wage-rates?map=" + encode(mapKey));
+                if (result.isSuccess() && result.body() != null) {
+                    JsonObject root = result.bodyAsJson().getAsJsonObject();
+                    for (var e : root.entrySet()) {
+                        if (!e.getValue().isJsonNull()) {
+                            rates.put(e.getKey(), e.getValue().getAsInt());
+                        }
                     }
                 }
+            } catch (Exception e) {
+                LOGGER.warn("[알바] 단가 응답 파싱 실패: {}", e.toString());
             }
             onResult.accept(rates);
         });

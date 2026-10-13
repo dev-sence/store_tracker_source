@@ -24,8 +24,12 @@ import java.util.regex.Pattern;
 public final class AlbaHireDetector {
     private static final Logger LOGGER = LoggerFactory.getLogger("sence_storetracker");
 
-    private static final Pattern HIRE_COMMAND = Pattern.compile("^알바\\s+고용\\s+(\\S+)\\s*$");
-    private static final Pattern FIRE_COMMAND = Pattern.compile("^알바\\s+해고\\s+(\\S+)\\s*$");
+    // 전엔 .matches()로 "알바 고용 <이름>"과 문자 그대로 끝까지 일치해야만 잡았는데, 플러그인이
+    // 뒤에 추가 인자/옵션을 더 붙이거나 끝에 공백이 더 있으면 그 즉시 통째로 안 잡혔다(브로드캐스트
+    // 쪽 패턴은 원래 find()라 안 이랬음 - 명령어 쪽만 유독 깐깐했던 비일관성). find()로 바꾸고
+    // 끝 앵커(\s*$)를 떼서 "알바 고용 <이름>"으로 시작하기만 하면 뒤에 뭐가 더 붙어도 잡히게 함.
+    private static final Pattern HIRE_COMMAND = Pattern.compile("^알바\\s+고용\\s+(\\S+)");
+    private static final Pattern FIRE_COMMAND = Pattern.compile("^알바\\s+해고\\s+(\\S+)");
     private static final Pattern HIRE_BROADCAST =
             Pattern.compile("(\\S+)님이\\s+(\\S+)님을\\s+알바생으로\\s+추가했어요");
     // "{해고한 사람}님이 알바생 {알바}님을 해고했어요." - 메시지에서 해고한 사람을 직접 뽑아내므로,
@@ -55,17 +59,24 @@ public final class AlbaHireDetector {
         String employer = client.player.getName().getString();
 
         Matcher hireMatcher = HIRE_COMMAND.matcher(trimmed);
-        if (hireMatcher.matches()) {
+        if (hireMatcher.find()) {
             handleHireDetected(employer, hireMatcher.group(1));
             return;
         }
 
         Matcher fireMatcher = FIRE_COMMAND.matcher(trimmed);
-        if (fireMatcher.matches()) {
+        if (fireMatcher.find()) {
             String employee = fireMatcher.group(1);
             LOGGER.info("[알바] 해고 감지(명령어): {} -> {}", employer, employee);
             AlbaTracker.getBridge().fire(employer, employee);
             AlbaTracker.forcePollNow();
+            return;
+        }
+
+        // "알바"로 시작하는데 위 두 패턴 어디에도 안 걸리면 - 플러그인 명령 형식이 예상과 달랐다는
+        // 뜻이라 로그에 남겨둔다(다음에 똑같은 문제가 또 보고되면 이 줄로 바로 원인을 알 수 있게).
+        if (trimmed.startsWith("알바")) {
+            LOGGER.info("[알바] 인식 안 되는 명령어 형식: \"{}\"", trimmed);
         }
     }
 
