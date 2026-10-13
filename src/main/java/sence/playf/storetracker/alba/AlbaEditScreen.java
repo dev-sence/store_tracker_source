@@ -75,14 +75,14 @@ public class AlbaEditScreen extends Screen {
                 () -> client.setScreen(new AlbaSettingsScreen())));
 
         int rowY = PANEL_Y + LIST_START_Y;
-        List<AlbaEntry> mine = myHires();
-        for (AlbaEntry entry : mine) {
+        List<AlbaEntry> active = activeHires();
+        for (AlbaEntry entry : active) {
             addButton(new AlbaButton(PANEL_X + PANEL_WIDTH - EDIT_BUTTON_WIDTH - 8, rowY + (ROW_H - EDIT_BUTTON_HEIGHT) / 2,
                     EDIT_BUTTON_WIDTH, EDIT_BUTTON_HEIGHT, "수정",
                     () -> client.setScreen(new AlbaGuiScreen(entry.employer(), entry.employee()))));
             rowY += ROW_H;
         }
-        if (mine.isEmpty()) {
+        if (active.isEmpty()) {
             rowY += ROW_H;
         }
 
@@ -134,15 +134,15 @@ public class AlbaEditScreen extends Screen {
         return client.player != null ? client.player.getName().getString() : "";
     }
 
-    private List<AlbaEntry> myHires() {
-        String me = myName();
-        return AlbaTracker.getCachedHires().stream()
-                .filter(e -> e.employer().equalsIgnoreCase(me))
-                .toList();
+    /** 예전엔 내가 고용한 알바만 보여줬는데, "다른 사람이 고용한 알바는 수정이 안 뜬다"는 요청에
+     * 맞춰 지금 일하는 알바 전체를 보여준다(해고처럼 작업 설정도 등록 멤버라면 누구든 고칠 수
+     * 있게 서버 쪽도 같이 풀었다). */
+    private List<AlbaEntry> activeHires() {
+        return AlbaTracker.getCachedHires();
     }
 
     private int panelHeight() {
-        int activeRows = Math.max(1, myHires().size());
+        int activeRows = Math.max(1, activeHires().size());
         int base = LIST_START_Y + activeRows * ROW_H + 18;
         int pendingRows = pendingRecords.size();
         return base + 16 + pendingRows * ROW_H + 30;
@@ -156,14 +156,14 @@ public class AlbaEditScreen extends Screen {
 
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText("알바 수정", true, COLOR_TITLE), PANEL_X + 10, PANEL_Y + 12, COLOR_TITLE);
 
-        List<AlbaEntry> mine = myHires();
+        List<AlbaEntry> active = activeHires();
         int rowY = PANEL_Y + LIST_START_Y;
         int textRight = PANEL_X + PANEL_WIDTH - EDIT_BUTTON_WIDTH - 16;
-        if (mine.isEmpty()) {
-            context.drawTextWithShadow(textRenderer, Text.literal("지금 고용 중인 알바가 없어요").formatted(Formatting.GRAY),
+        if (active.isEmpty()) {
+            context.drawTextWithShadow(textRenderer, Text.literal("지금 일하는 알바가 없어요").formatted(Formatting.GRAY),
                     PANEL_X + 10, rowY + 6, COLOR_MUTED);
         } else {
-            for (AlbaEntry entry : mine) {
+            for (AlbaEntry entry : active) {
                 drawPersonRow(context, entry, rowY, textRight, true);
                 rowY += ROW_H;
             }
@@ -199,14 +199,18 @@ public class AlbaEditScreen extends Screen {
         }
 
         int textX = PANEL_X + 10 + FACE_SIZE + 6;
+        int maxTextWidth = Math.max(0, textRight - textX - 4);
         AlbaJob job = AlbaJob.fromName(entry.job());
         String jobLabel = job != null ? job.label() : "미지정";
-        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(entry.employee(), true, COLOR_TITLE),
+        String title = active ? entry.employer() + " → " + entry.employee() : entry.employee();
+        title = trimWithEllipsis(textRenderer, title, maxTextWidth);
+        context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(title, true, COLOR_TITLE),
                 textX, rowY + 3, COLOR_TITLE);
         Integer rate = entry.job() != null ? wageRates.get(entry.job()) : null;
         String detail = active
                 ? jobLabel + " · " + relativeTime(entry.hiredAtMillis())
                 : jobLabel + (rate != null ? " · " + rate.toString() + "원/상자" : "");
+        detail = trimWithEllipsis(textRenderer, detail, maxTextWidth);
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, rowY + 15, COLOR_MUTED);
 
         AlbaZone zone = job == AlbaJob.PUMPKIN ? parseZone(entry.zone()) : null;
@@ -216,6 +220,17 @@ public class AlbaEditScreen extends Screen {
             context.fill(swatchX, swatchY, swatchX + ZONE_SWATCH_SIZE, swatchY + ZONE_SWATCH_SIZE, zone.color());
             drawBorder(context, swatchX, swatchY, ZONE_SWATCH_SIZE, ZONE_SWATCH_SIZE, COLOR_BORDER);
         }
+    }
+
+    /** 폭이 넘치면 "..."을 붙여서 잘린 게 보이게 한다 - HUD 패널에서 겪었던 글자-아이콘 겹침과
+     * 같은 문제를 여기서도 미리 막는다. */
+    private static String trimWithEllipsis(net.minecraft.client.font.TextRenderer tr, String text, int maxWidth) {
+        if (tr.getWidth(text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "...";
+        String trimmed = tr.trimToWidth(text, Math.max(0, maxWidth - tr.getWidth(ellipsis)));
+        return trimmed + ellipsis;
     }
 
     private static AlbaZone parseZone(String name) {
