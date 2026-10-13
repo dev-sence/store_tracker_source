@@ -33,10 +33,19 @@ _last_dashboard_refresh: dict[str, float] = {}
 # 등록된 상자가 하나도 없는 것처럼 보였던 문제 - 데이터는 이미 playfarm.kr로 옮겼지만,
 # 등록자가 자기 서버 목록 주소를 안 바꾸면 또 갈라질 수 있어서 아예 코드에서 합친다).
 _MAP_KEY_ALIASES = {"playf.kr": "playfarm.kr"}
+_DEFAULT_MC_PORT_SUFFIX = ":25565"
 
 
 def _normalize_map_key(map_key):
-    return _MAP_KEY_ALIASES.get(map_key, map_key)
+    """클라이언트마다 서버 목록에 저장한 주소 문자열이 조금씩 달라도(대소문자, 기본 포트 유무,
+    앞뒤 공백) 같은 맵으로 합쳐지게 한다 - 안 그러면 "나한테는 보이는데 남한테는 안 보인다"는
+    식으로 데이터가 조용히 갈라진다(실제로 "playf.kr"/"playfarm.kr"로 한 번 발생했음)."""
+    if not map_key:
+        return map_key
+    normalized = map_key.strip().lower()
+    if normalized.endswith(_DEFAULT_MC_PORT_SUFFIX):
+        normalized = normalized[: -len(_DEFAULT_MC_PORT_SUFFIX)]
+    return _MAP_KEY_ALIASES.get(normalized, normalized)
 
 
 def _parse_encrypted_body():

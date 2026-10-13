@@ -6,13 +6,17 @@ from sqlalchemy import func, or_
 import inventory
 
 from models import (
-    ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member, PlayerItemLedger, PublicItemType,
-    RequestLog, TrackedChest, db,
+    AlbaHire, AlbaPersonNote, AlbaWageRate, ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member,
+    PlayerItemLedger, PublicItemType, RequestLog, TrackedChest, UnassignedReturn, db,
 )
 
 # map_key 컬럼을 갖는 모든 테이블 - 맵 키 이름을 바꿀 때(/admin/rename-map-key) 전부 같이 옮긴다.
+# AlbaHire/AlbaWageRate/AlbaPersonNote/UnassignedReturn은 나중에 추가된 기능이라 처음엔 이 목록에
+# 빠져 있었다 - 맵 키가 갈라지는 문제(클라이언트마다 서버 목록 주소 문자열이 달라서)가 알바
+# 기능에서도 똑같이 날 수 있는데 그때는 이 도구로 못 옮겼음.
 _MAP_KEY_MODELS = [
     TrackedChest, PublicItemType, ChestInventoryItem, PlayerItemLedger, FeatureToggle, Event, DashboardMessage,
+    AlbaHire, AlbaWageRate, AlbaPersonNote, UnassignedReturn,
 ]
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -76,6 +80,20 @@ def list_events():
     offset = int(request.args.get("offset", 0))
     events = Event.query.order_by(Event.received_at.desc()).offset(offset).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
+
+
+@admin_bp.get("/map-keys")
+@require_admin
+def list_map_keys():
+    """테이블별로 지금 실제 쓰이고 있는 map_key 값과 개수를 보여준다 - "어떤 사람은 보이고 어떤
+    사람은 안 보인다"는 신고가 들어오면(클라이언트마다 서버 목록 주소 문자열이 달라서 데이터가
+    갈라지는 문제, 이전에 "playf.kr"/"playfarm.kr"로 실제 발생한 적 있음) 여기서 갈라진 값이
+    있는지 바로 확인하고 /admin/rename-map-key로 합친다."""
+    result = {}
+    for model in _MAP_KEY_MODELS:
+        rows = db.session.query(model.map_key, func.count()).group_by(model.map_key).all()
+        result[model.__tablename__] = {key: count for key, count in rows}
+    return jsonify(result)
 
 
 @admin_bp.post("/rename-map-key")
