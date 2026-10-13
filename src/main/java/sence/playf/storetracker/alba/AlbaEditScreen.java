@@ -9,6 +9,7 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +40,11 @@ public class AlbaEditScreen extends Screen {
 
     private final List<AlbaButton> albaButtons = new ArrayList<>();
     private List<AlbaEntry> pendingRecords = List.of();
-    private Map<String, Integer> wageRates = Map.of();
+    // Map.of()(불변 맵)는 containsKey(null)에서 NullPointerException을 던진다 - 아직 작업을
+    // 안 고른 채로 해고된 기록은 entry.job()이 null이라, 서버에서 단가를 받아오기 전(첫 렌더
+    // 몇 프레임) 이 화면이 뜨자마자 크래시하는 원인이었다(1.21.4 사용자들의 "/알바설정이 안
+    // 먹히고 튕긴다" 신고와 정확히 일치). null 키를 허용하는 HashMap으로 바꿈.
+    private Map<String, Integer> wageRates = new HashMap<>();
     private int pendingListStartY;
 
     public AlbaEditScreen() {
@@ -198,9 +203,10 @@ public class AlbaEditScreen extends Screen {
         String jobLabel = job != null ? job.label() : "미지정";
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(entry.employee(), true, COLOR_TITLE),
                 textX, rowY + 3, COLOR_TITLE);
+        Integer rate = entry.job() != null ? wageRates.get(entry.job()) : null;
         String detail = active
                 ? jobLabel + " · " + relativeTime(entry.hiredAtMillis())
-                : jobLabel + (wageRates.containsKey(entry.job()) ? " · " + wageRates.get(entry.job()) + "원/상자" : "");
+                : jobLabel + (rate != null ? " · " + rate.toString() + "원/상자" : "");
         context.drawTextWithShadow(textRenderer, AlbaPlatform.styledText(detail, false, COLOR_MUTED), textX, rowY + 15, COLOR_MUTED);
 
         AlbaZone zone = job == AlbaJob.PUMPKIN ? parseZone(entry.zone()) : null;
