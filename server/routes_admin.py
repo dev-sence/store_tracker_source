@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
@@ -80,6 +81,21 @@ def list_events():
     offset = int(request.args.get("offset", 0))
     events = Event.query.order_by(Event.received_at.desc()).offset(offset).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
+
+
+@admin_bp.post("/alba/hires/<int:hire_id>/fire")
+@require_admin
+def admin_force_fire_alba(hire_id):
+    """인게임 해고 감지가 안 돼서(목격한 클라이언트가 없었거나 등) 서버에 계속 활성으로 남아있는
+    알바 기록을 개발자가 직접 끝낸다 - 대시보드에도 같은 기능(로그인 세션 기반)이 있지만, 이건
+    관리자 토큰으로 직접 정리할 때 쓴다."""
+    hire = AlbaHire.query.get(hire_id)
+    if hire is None:
+        return jsonify({"error": "not found"}), 404
+    if hire.fired_at is None:
+        hire.fired_at = datetime.now(timezone.utc)
+        db.session.commit()
+    return jsonify(hire.to_dict())
 
 
 @admin_bp.post("/alba/fix-wage-units")
