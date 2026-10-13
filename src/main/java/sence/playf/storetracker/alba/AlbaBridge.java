@@ -160,6 +160,25 @@ public final class AlbaBridge {
             ApiClient.Result result = ApiClient.postEncrypted(BuildInfo.API_BASE_URL, path, channel(), body);
             if (!result.isSuccess()) {
                 LOGGER.warn("{} 전송 실패 (status={})", context, result.statusCode());
+                // 예전엔 로그에만 남기고 조용히 넘어갔다 - 고용/해고가 감지는 됐는데(로그엔 찍힘)
+                // 서버 저장은 실패하면(예: 아직 등록 안 된 닉네임이라 404) 아무 화면에도 티가 안 나서
+                // 플레이어는 "왜 안 뜨지"하며 같은 명령을 여러 번 반복하게 됐다. 재시도는 버그
+                // 위험이 있어 일부러 안 넣기로 했었지만(이 모드 다른 기능에서도 같은 원칙), 최소한
+                // 눈에 보이는 경고는 띄워서 뭔가 실패했다는 걸 바로 알 수 있게 한다.
+                notifyFailure(context, result.statusCode());
+            }
+        });
+    }
+
+    private static void notifyFailure(String context, int statusCode) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        client.execute(() -> {
+            if (client.player != null) {
+                String reason = statusCode == 404
+                        ? "등록된 멤버가 아니에요(대시보드에서 먼저 로그인/연동 확인해주세요)"
+                        : "status=" + statusCode;
+                client.player.sendMessage(net.minecraft.text.Text.literal(
+                        "[StoreTracker] " + context + " 전송 실패 - " + reason), false);
             }
         });
     }
