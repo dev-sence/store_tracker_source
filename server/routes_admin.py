@@ -84,6 +84,20 @@ def list_events():
     return jsonify([e.to_dict() for e in events])
 
 
+@admin_bp.get("/unassigned-returns-by-depositor")
+@require_admin
+def admin_unassigned_returns_by_depositor():
+    """닉네임 변경 직후처럼, 보유 수량이 실제보다 적게 잡혀 있던 시점에 반납하면 초과분이
+    UnassignedReturn으로 빠진다 - 그 사람 이름으로 걸린 미해결(assigned_to is null) 건을 찾는다."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    depositor = (request.args.get("depositor") or "").strip()
+    query = UnassignedReturn.query.filter_by(map_key=map_key, assigned_to=None)
+    if depositor:
+        query = query.filter(func.lower(UnassignedReturn.depositor) == depositor.lower())
+    rows = query.order_by(UnassignedReturn.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
 @admin_bp.get("/player-names")
 @require_admin
 def admin_player_names():
