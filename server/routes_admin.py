@@ -84,6 +84,29 @@ def list_events():
     return jsonify([e.to_dict() for e in events])
 
 
+@admin_bp.get("/player-names")
+@require_admin
+def admin_player_names():
+    """PlayerItemLedger/Event에 등장하는 닉네임 전부 - 닉네임 변경으로 보유 장부가 옛 이름/새 이름
+    으로 쪼개졌는지 찾을 때 쓴다(알바와 같은 문제가 재고 보유 쪽에서도 날 수 있음). search로
+    부분 일치 필터."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    search = (request.args.get("search") or "").lower()
+    ledger_names = {}
+    for name, count in db.session.query(PlayerItemLedger.minecraft_username, func.count()).filter(
+        PlayerItemLedger.map_key == map_key,
+    ).group_by(PlayerItemLedger.minecraft_username).all():
+        if not search or search in name.lower():
+            ledger_names[name] = count
+    event_names = {}
+    for name, count in db.session.query(Event.minecraft_username, func.count()).filter(
+        Event.map_key == map_key,
+    ).group_by(Event.minecraft_username).all():
+        if not search or search in name.lower():
+            event_names[name] = count
+    return jsonify({"player_item_ledger": ledger_names, "events": event_names})
+
+
 @admin_bp.get("/alba/people-names")
 @require_admin
 def admin_alba_people_names():
