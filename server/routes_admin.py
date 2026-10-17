@@ -124,6 +124,33 @@ def admin_assign_returns_to_depositor():
     return jsonify({"status": "ok", "assigned": assigned, "failed": failed})
 
 
+@admin_bp.post("/unassigned-returns/clear-by-depositor")
+@require_admin
+def admin_clear_unassigned_returns_by_depositor():
+    """그 사람 이름으로 걸린 미해결 미귀속 반납을 목록에서만 치운다(보유 장부/재고는 안 건드림) -
+    공유 도구를 여러 번 빌렸다 반납하는 식으로, 그 시점 보유량을 지금 와서 역산할 수 없는 낡은
+    기록을 정리할 때 쓴다(assign-to-depositor로 지정 가능한 건 먼저 그쪽으로 처리하고, 장부
+    부족으로 실패한 나머지만 이걸로 정리하는 흐름)."""
+    data = request.get_json(silent=True) or {}
+    map_key = _normalize_map_key(data.get("map") or request.args.get("map", ""))
+    depositor = (data.get("depositor") or "").strip()
+    if not depositor:
+        return jsonify({"error": "depositor가 필요합니다"}), 400
+
+    rows = UnassignedReturn.query.filter(
+        UnassignedReturn.map_key == map_key,
+        UnassignedReturn.assigned_to.is_(None),
+        func.lower(UnassignedReturn.depositor) == depositor.lower(),
+    ).all()
+    now = datetime.now(timezone.utc)
+    cleared_ids = [r.id for r in rows]
+    for r in rows:
+        r.assigned_to = "(정리됨: admin-token)"
+        r.assigned_at = now
+    db.session.commit()
+    return jsonify({"status": "ok", "cleared": cleared_ids})
+
+
 @admin_bp.get("/unassigned-returns-by-depositor")
 @require_admin
 def admin_unassigned_returns_by_depositor():
