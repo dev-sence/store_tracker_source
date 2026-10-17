@@ -132,6 +132,69 @@ def admin_alba_people_names():
     return jsonify(counts)
 
 
+@admin_bp.post("/merge-player")
+@require_admin
+def admin_merge_player():
+    """마크 닉네임이 바뀐 사람의 옛 이름 기록을 새 이름으로 전부 합친다 - 입출고 로그(Event),
+    보유 장부(PlayerItemLedger), 미귀속 반납(UnassignedReturn.depositor), 알바 기록(AlbaHire
+    employer/employee, AlbaPersonNote) 전부. PlayerItemLedger는 map_key+이름+item_id가
+    유니크해서 단순 이름 변경이 안 되는 경우가 있다(새 이름이 같은 아이템을 이미 들고 있으면) -
+    그런 행은 옛 이름 쪽 수량을 새 이름 쪽에 더하고 옛 행을 지운다."""
+    data = request.get_json(silent=True) or {}
+    map_key = _normalize_map_key(data.get("map") or request.args.get("map", ""))
+    old_name = (data.get("from") or "").strip()
+    new_name = (data.get("to") or "").strip()
+    if not old_name or not new_name or old_name.lower() == new_name.lower():
+        return jsonify({"error": "from, to가 필요하고 서로 달라야 합니다"}), 400
+
+    moved = {
+        "events": 0, "player_item_ledger_renamed": 0, "player_item_ledger_merged": 0,
+        "unassigned_returns": 0, "alba_hires_employer": 0, "alba_hires_employee": 0, "alba_person_notes": 0,
+    }
+
+    for row in Event.query.filter(Event.map_key == map_key, func.lower(Event.minecraft_username) == old_name.lower()).all():
+        row.minecraft_username = new_name
+        moved["events"] += 1
+
+    for row in UnassignedReturn.query.filter(
+        UnassignedReturn.map_key == map_key, func.lower(UnassignedReturn.depositor) == old_name.lower(),
+    ).all():
+        row.depositor = new_name
+        moved["unassigned_returns"] += 1
+
+    for row in AlbaHire.query.filter(AlbaHire.map_key == map_key, func.lower(AlbaHire.employer) == old_name.lower()).all():
+        row.employer = new_name
+        moved["alba_hires_employer"] += 1
+    for row in AlbaHire.query.filter(AlbaHire.map_key == map_key, func.lower(AlbaHire.employee) == old_name.lower()).all():
+        row.employee = new_name
+        moved["alba_hires_employee"] += 1
+    for row in AlbaPersonNote.query.filter(
+        AlbaPersonNote.map_key == map_key, func.lower(AlbaPersonNote.player_name) == old_name.lower(),
+    ).all():
+        row.player_name = new_name
+        moved["alba_person_notes"] += 1
+
+    old_ledger_rows = PlayerItemLedger.query.filter(
+        PlayerItemLedger.map_key == map_key, func.lower(PlayerItemLedger.minecraft_username) == old_name.lower(),
+    ).all()
+    for row in old_ledger_rows:
+        existing = PlayerItemLedger.query.filter(
+            PlayerItemLedger.map_key == map_key,
+            func.lower(PlayerItemLedger.minecraft_username) == new_name.lower(),
+            PlayerItemLedger.item_id == row.item_id,
+        ).first()
+        if existing is not None:
+            existing.held_count += row.held_count
+            db.session.delete(row)
+            moved["player_item_ledger_merged"] += 1
+        else:
+            row.minecraft_username = new_name
+            moved["player_item_ledger_renamed"] += 1
+
+    db.session.commit()
+    return jsonify({"status": "ok", "from": old_name, "to": new_name, "moved": moved})
+
+
 @admin_bp.post("/alba/rename-player")
 @require_admin
 def admin_rename_alba_player():
