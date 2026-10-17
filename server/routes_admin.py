@@ -92,12 +92,17 @@ def admin_alba_people_names():
     map_key = _normalize_map_key(request.args.get("map", ""))
     search = (request.args.get("search") or "").lower()
     counts = {}
-    for row in AlbaHire.query.filter_by(map_key=map_key).all():
-        for name, role in ((row.employer, "employer"), (row.employee, "employee")):
-            if search and search not in name.lower():
-                continue
-            entry = counts.setdefault(name, {"employer": 0, "employee": 0})
-            entry[role] += 1
+    try:
+        for row in AlbaHire.query.filter_by(map_key=map_key).all():
+            for name, role in ((row.employer, "employer"), (row.employee, "employee")):
+                if name is None:
+                    continue
+                if search and search not in name.lower():
+                    continue
+                entry = counts.setdefault(name, {"employer": 0, "employee": 0})
+                entry[role] += 1
+    except Exception as e:
+        return jsonify({"error": "internal", "detail": repr(e)}), 500
     return jsonify(counts)
 
 
