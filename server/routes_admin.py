@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import func, or_
 
 import inventory
+from routes_public import _normalize_map_key
 
 from models import (
     AlbaHire, AlbaPersonNote, AlbaWageRate, ChestInventoryItem, DashboardMessage, Event, FeatureToggle, Member,
@@ -81,6 +82,51 @@ def list_events():
     offset = int(request.args.get("offset", 0))
     events = Event.query.order_by(Event.received_at.desc()).offset(offset).limit(limit).all()
     return jsonify([e.to_dict() for e in events])
+
+
+@admin_bp.get("/alba/people-names")
+@require_admin
+def admin_alba_people_names():
+    """AlbaHire에 등장하는 employer/employee 닉네임 전부(대소문자 그대로) + 건수 - 닉네임 변경으로
+    같은 사람이 두 이름으로 쪼개졌는지 찾을 때 쓴다. search 쿼리파라미터로 부분 일치 필터 가능."""
+    map_key = _normalize_map_key(request.args.get("map", ""))
+    search = (request.args.get("search") or "").lower()
+    counts = {}
+    for row in AlbaHire.query.filter_by(map_key=map_key).all():
+        for name, role in ((row.employer, "employer"), (row.employee, "employee")):
+            if search and search not in name.lower():
+                continue
+            entry = counts.setdefault(name, {"employer": 0, "employee": 0})
+            entry[role] += 1
+    return jsonify(counts)
+
+
+@admin_bp.post("/alba/rename-player")
+@require_admin
+def admin_rename_alba_player():
+    """닉네임이 바뀐 사람의 예전 기록을 새 닉네임으로 합친다 - AlbaHire의 employer/employee 둘 다,
+    AlbaPersonNote도 같이 옮긴다."""
+    data = request.get_json(silent=True) or {}
+    map_key = _normalize_map_key(data.get("map") or request.args.get("map", ""))
+    old_name = (data.get("from") or "").strip()
+    new_name = (data.get("to") or "").strip()
+    if not old_name or not new_name or old_name.lower() == new_name.lower():
+        return jsonify({"error": "from, to가 필요하고 서로 달라야 합니다"}), 400
+
+    moved = {"alba_hires_employer": 0, "alba_hires_employee": 0, "alba_person_notes": 0}
+    for row in AlbaHire.query.filter(AlbaHire.map_key == map_key, func.lower(AlbaHire.employer) == old_name.lower()).all():
+        row.employer = new_name
+        moved["alba_hires_employer"] += 1
+    for row in AlbaHire.query.filter(AlbaHire.map_key == map_key, func.lower(AlbaHire.employee) == old_name.lower()).all():
+        row.employee = new_name
+        moved["alba_hires_employee"] += 1
+    for row in AlbaPersonNote.query.filter(
+        AlbaPersonNote.map_key == map_key, func.lower(AlbaPersonNote.player_name) == old_name.lower(),
+    ).all():
+        row.player_name = new_name
+        moved["alba_person_notes"] += 1
+    db.session.commit()
+    return jsonify({"status": "ok", "from": old_name, "to": new_name, "moved": moved})
 
 
 @admin_bp.post("/alba/hires/<int:hire_id>/fire")
