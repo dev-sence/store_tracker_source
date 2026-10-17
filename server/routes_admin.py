@@ -84,6 +84,46 @@ def list_events():
     return jsonify([e.to_dict() for e in events])
 
 
+@admin_bp.post("/unassigned-returns/assign-to-depositor")
+@require_admin
+def admin_assign_returns_to_depositor():
+    """닉네임이 갈라져 있던 동안 본인이 반납한 게 "미귀속"으로 빠진 걸 한 번에 정리한다 - 그
+    사람(depositor) 이름으로 걸린 미해결 건을 전부 "본인 몫"으로 지정한다(보유 장부를 먼저
+    merge-player로 합쳐서 held_count가 충분해야 전부 성공한다 - 부족하면 그 건만 실패로 남는다)."""
+    data = request.get_json(silent=True) or {}
+    map_key = _normalize_map_key(data.get("map") or request.args.get("map", ""))
+    depositor = (data.get("depositor") or "").strip()
+    if not depositor:
+        return jsonify({"error": "depositor가 필요합니다"}), 400
+
+    member = Member.query.filter(func.lower(Member.minecraft_username) == depositor.lower()).first()
+    if member is None:
+        return jsonify({"error": "등록되지 않은 닉네임입니다"}), 404
+    chest = TrackedChest.query.filter_by(map_key=map_key).first()
+    if chest is None:
+        return jsonify({"error": "등록된 상자가 없습니다"}), 404
+    chest_pos = {"dimension": chest.dimension, "x": chest.x, "y": chest.y, "z": chest.z}
+
+    rows = UnassignedReturn.query.filter(
+        UnassignedReturn.map_key == map_key,
+        UnassignedReturn.assigned_to.is_(None),
+        func.lower(UnassignedReturn.depositor) == depositor.lower(),
+    ).order_by(UnassignedReturn.id).all()
+
+    assigned, failed = [], []
+    for ret in rows:
+        ok, message = inventory.assign_return(map_key, chest_pos, ret, member.minecraft_username)
+        if ok:
+            ret.assigned_to = member.minecraft_username
+            ret.assigned_at = datetime.now(timezone.utc)
+            db.session.commit()
+            assigned.append(ret.id)
+        else:
+            db.session.rollback()
+            failed.append({"id": ret.id, "reason": message})
+    return jsonify({"status": "ok", "assigned": assigned, "failed": failed})
+
+
 @admin_bp.get("/unassigned-returns-by-depositor")
 @require_admin
 def admin_unassigned_returns_by_depositor():
