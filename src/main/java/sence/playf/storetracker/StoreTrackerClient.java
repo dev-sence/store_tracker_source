@@ -78,7 +78,11 @@ public class StoreTrackerClient implements ClientModInitializer {
             if (client.player == null) {
                 return;
             }
-            if (++albaTickCounter[0] >= 200) { // 20틱/초 * 10초 - HUD가 너무 늦게 안 따라오게 짧은 주기로.
+            // 접속 중인 사람마다 각자 폴링하는 거라, 짧은 주기(10초)는 사람이 많을 때 DB를 계속
+            // 깨어있게 만들어 Neon 컴퓨팅 시간을 많이 잡아먹는다(실제로 무료 플랜 월간 한도를
+            // 넘겨서 서비스가 멈춘 적 있음) - 60초로 늘림(HUD가 새 고용/해고를 최대 그만큼 늦게
+            // 반영할 수 있다는 트레이드오프는 있음).
+            if (++albaTickCounter[0] >= 1200) { // 20틱/초 * 60초
                 albaTickCounter[0] = 0;
                 AlbaTracker.pollNow();
             }
