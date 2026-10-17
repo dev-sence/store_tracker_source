@@ -1,5 +1,7 @@
 (function () {
-  const REFRESH_INTERVAL_MS = 15000;
+  // 15초는 대시보드를 켜놓은 사람 수만큼 DB를 계속 깨어있게 만들어서(Neon 컴퓨팅 시간 과다 소모의
+  // 주범) 60초로 늘림 - "실시간"이라기보단 "자주 새로고침"에 더 가까운 용도라 이 정도면 충분하다.
+  const REFRESH_INTERVAL_MS = 60000;
   const currentMap = document.body.dataset.map || '';
   const isDeveloper = document.body.dataset.isDeveloper === 'true';
   const isSuperAdmin = document.body.dataset.isSuperAdmin === 'true';
